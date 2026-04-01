@@ -104,8 +104,17 @@ class OpenAIEmbeddingProvider:
         dimension: Optional[int] = None,
     ):
         self.model = model
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.api_base = api_base or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+        self.api_key = (
+            api_key
+            or os.getenv("COSCOPE_OPENAI_API_KEY")
+            or os.getenv("COSCOPE_SILICONFLOW_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
+        self.api_base = (
+            api_base
+            or os.getenv("COSCOPE_OPENAI_BASE_URL")
+            or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+        )
         self.dimension = dimension or self._get_dimension()
 
         # Lazy load OpenAI

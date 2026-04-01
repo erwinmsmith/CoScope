@@ -185,6 +185,21 @@ class AgentRolesConfig(BaseModel):
     ))
 
 
+class LLMConfig(BaseModel):
+    provider: str = "siliconflow"
+    temperature: float = 0
+    max_tokens: int = 4096
+    timeout: int = 60
+    openai: dict = Field(default_factory=lambda: {
+        "api_base": "https://api.openai.com/v1",
+        "model": "gpt-4o",
+    })
+    siliconflow: dict = Field(default_factory=lambda: {
+        "api_base": "https://api.siliconflow.cn/v1",
+        "model": "Qwen/Qwen3-32B",
+    })
+
+
 class EmbeddingProviderConfig(BaseModel):
     provider: str = "openai"
     model_name: str = "text-embedding-3-small"
@@ -289,6 +304,7 @@ class CoScopeConfig(BaseModel):
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     memory_types: MemoryTypesConfig = Field(default_factory=MemoryTypesConfig)
     agent_roles: AgentRolesConfig = Field(default_factory=AgentRolesConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     agent_framework: AgentFrameworkConfig = Field(default_factory=AgentFrameworkConfig)
@@ -413,6 +429,43 @@ class ConfigLoader:
         if "qdrant" in storage_data:
             storage_dict["qdrant"] = storage_data["qdrant"]
         config.storage = StorageConfig(**storage_dict)
+
+        # LLM overrides
+        llm_data = self._raw_yaml.get("llm", {})
+        llm_dict = {
+            "provider": os.getenv(
+                "COSCOPE_LLM_PROVIDER",
+                llm_data.get("provider", "siliconflow")
+            ),
+            "temperature": float(os.getenv(
+                "COSCOPE_LLM_TEMPERATURE",
+                str(llm_data.get("temperature", 0))
+            )),
+            "max_tokens": int(os.getenv(
+                "COSCOPE_LLM_MAX_TOKENS",
+                str(llm_data.get("max_tokens", 4096))
+            )),
+            "timeout": int(os.getenv(
+                "COSCOPE_LLM_TIMEOUT",
+                str(llm_data.get("timeout", 60))
+            )),
+        }
+        siliconflow_defaults = {
+            "api_base": "https://api.siliconflow.cn/v1",
+            "model": "Qwen/Qwen3-32B",
+        }
+        sf_data = llm_data.get("siliconflow", siliconflow_defaults)
+        llm_dict["siliconflow"] = {
+            "api_base": os.getenv("COSCOPE_SILICONFLOW_BASE_URL", sf_data.get("api_base", siliconflow_defaults["api_base"])),
+            "model": os.getenv("COSCOPE_SILICONFLOW_MODEL", sf_data.get("model", siliconflow_defaults["model"])),
+        }
+        openai_defaults = {"api_base": "https://api.openai.com/v1", "model": "gpt-4o"}
+        oa_data = llm_data.get("openai", openai_defaults)
+        llm_dict["openai"] = {
+            "api_base": os.getenv("COSCOPE_OPENAI_BASE_URL", oa_data.get("api_base", openai_defaults["api_base"])),
+            "model": os.getenv("COSCOPE_OPENAI_MODEL", oa_data.get("model", openai_defaults["model"])),
+        }
+        config.llm = LLMConfig(**llm_dict)
 
         # Embedding overrides
         embedding_data = self._raw_yaml.get("embedding", {})

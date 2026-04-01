@@ -7,6 +7,7 @@ Provides LangChain-compatible agent and tool interfaces.
 from __future__ import annotations
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import (
@@ -330,7 +331,8 @@ def create_langchain_agent(
     from langchain.agents import AgentExecutor, create_react_agent
     from langchain.chains import LLMChain
     from langchain.prompts import PromptTemplate
-    from langchain_openai import OpenAI
+    from langchain_openai import ChatOpenAI
+    from coscope.config.settings import get_config
 
     # Create the retrieval tool
     retrieval_tool = CoScopeRetrievalTool(
@@ -358,8 +360,29 @@ def create_langchain_agent(
     Think step by step and use tools as needed.
     """)
 
-    # Create LLM
-    llm = OpenAI(temperature=0)
+    # Create LLM using configured provider (SiliconFlow or OpenAI, both OpenAI-compatible)
+    cfg = get_config()
+    llm_cfg = cfg.llm
+    if llm_cfg.provider == "siliconflow":
+        provider_settings = llm_cfg.siliconflow
+        api_key = (
+            os.getenv("COSCOPE_SILICONFLOW_API_KEY")
+            or os.getenv("COSCOPE_OPENAI_API_KEY")
+        )
+    else:
+        provider_settings = llm_cfg.openai
+        api_key = (
+            os.getenv("COSCOPE_OPENAI_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
+    llm = ChatOpenAI(
+        model=provider_settings["model"],
+        base_url=provider_settings["api_base"],
+        api_key=api_key,
+        temperature=llm_cfg.temperature,
+        max_tokens=llm_cfg.max_tokens,
+        timeout=llm_cfg.timeout,
+    )
 
     # Create agent
     agent = create_react_agent(

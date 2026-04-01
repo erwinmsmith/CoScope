@@ -193,6 +193,22 @@ agent_roles:
       retention_relevance: 0.2
       authority: 0.1
 
+# --- LLM Settings ---
+llm:
+  provider: "siliconflow"             # openai, siliconflow, custom
+  temperature: 0
+  max_tokens: 4096
+  timeout: 60
+
+  # Provider-specific settings
+  openai:
+    api_base: "https://api.openai.com/v1"
+    model: "gpt-4o"
+
+  siliconflow:
+    api_base: "https://api.siliconflow.cn/v1"
+    model: "Qwen/Qwen3-32B"
+
 # --- Embedding Model Settings ---
 embedding:
   provider: "openai"                  # openai, huggingface, local, custom

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m py_compile coscope/__init__.py coscope/config/__init__.py coscope/config/settings.py coscope/core/__init__.py coscope/core/types.py coscope/core/scope.py coscope/core/memory_slice.py)",
+      "Bash(python3 -m py_compile coscope/retrieval/__init__.py coscope/retrieval/request_encoder.py coscope/retrieval/scope_router.py coscope/retrieval/query_matrix_builder.py coscope/retrieval/shared_projection.py)",
+      "Bash(python3 -m py_compile coscope/retrieval/shared_candidate_retriever.py coscope/retrieval/personalized_reranker.py coscope/retrieval/private_fallback_retriever.py coscope/retrieval/evidence_fusion.py coscope/retrieval/pipeline.py)",
+      "Bash(python3 -m py_compile coscope/memory/__init__.py coscope/memory/store.py coscope/evaluation/__init__.py coscope/evaluation/evaluator.py coscope/engine.py)",
+      "Bash(python3 -m py_compile coscope/agents/__init__.py coscope/agents/langchain_agent.py coscope/agents/langgraph_agent.py)",
+      "Bash(python3 -c ':*)",
+      "Bash(python3)",
+      "Bash(gh auth:*)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git rm:*)",
+      "Bash(git reset:*)",
+      "Bash(gh repo:*)"
+    ]
+  }
+}
