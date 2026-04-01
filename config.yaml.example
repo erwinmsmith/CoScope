@@ -1,0 +1,284 @@
+# ============================================================
+# CoScope Configuration
+# This file defines structural configuration for the pipeline.
+# Do NOT put secrets here — use .env for secrets.
+# ============================================================
+
+# --- Retrieval Pipeline Settings ---
+retrieval:
+  query_embedding_dim: 1024          # Query embedding dimension (k)
+  projection_dim: 256                 # Intermediate projection dimension (l)
+  svd_rank: 64                       # Effective rank for SVD subspace extraction (r)
+  shared_top_k: 50                    # Top-k candidates per query in shared retrieval
+  rerank_top_k: 20                    # Top-k candidates after agent-specific reranking
+  max_batch_size: 100                 # Maximum requests per batch
+  request_timeout: 30                 # Request timeout in seconds
+  enable_sparse_mask: true            # Enable structured sparse mask in projection
+  enable_private_fallback: true       # Enable private fallback retrieval
+  fallback_threshold: 5               # Min shared candidates before triggering fallback
+  enable_rerank: true                 # Enable agent-specific reranking
+
+# --- Scope Hierarchy Definition ---
+# Defines the memory scope hierarchy used for scope overlap detection
+# Each scope can have: id, name, description, parent, scope_type, default_policy
+scope_hierarchy:
+  agent_private:
+    - id: "agent/{agent_id}/private"
+      name: "Agent Private Scope"
+      description: "Private memory accessible only to the owning agent"
+      scope_type: "agent_private"
+      default_policy:
+        visibility: ["owner"]
+        max_clearance: 5
+        exclude_quarantined: true
+
+  task_shared:
+    - id: "task/{task_id}/shared"
+      name: "Task Shared Scope"
+      description: "Shared memory accessible to all agents working on the same task"
+      scope_type: "task_shared"
+      default_policy:
+        visibility: ["team"]
+        max_clearance: 3
+        exclude_quarantined: true
+
+  session:
+    - id: "session/{session_id}"
+      name: "Session Scope"
+      description: "Context generated within the current session"
+      scope_type: "session"
+      default_policy:
+        visibility: ["team", "session"]
+        max_clearance: 2
+        exclude_quarantined: false
+
+  workspace:
+    - id: "workspace/{workspace_id}"
+      name: "Workspace Scope"
+      description: "Long-term shared knowledge across sessions"
+      scope_type: "workspace"
+      default_policy:
+        visibility: ["public", "team"]
+        max_clearance: 2
+        exclude_quarantined: true
+
+  governed:
+    - id: "governed/{governed_id}"
+      name: "Governed Scope"
+      description: "Memory under enhanced governance and access control"
+      scope_type: "governed"
+      default_policy:
+        visibility: ["restricted"]
+        max_clearance: 4
+        exclude_quarantined: true
+        audit_required: true
+
+# --- Policy Definition ---
+policy:
+  visibility_levels:
+    - "owner"          # Only the owner agent
+    - "team"           # All agents on the same team/task
+    - "session"        # All agents in the current session
+    - "public"         # All agents in the workspace
+    - "restricted"     # Only agents with specific clearance
+
+  clearance_levels:
+    - level: 1
+      name: "public"
+      description: "Public information"
+    - level: 2
+      name: "standard"
+      description: "Standard team information"
+    - level: 3
+      name: "sensitive"
+      description: "Sensitive project information"
+    - level: 4
+      name: "confidential"
+      description: "Confidential information"
+    - level: 5
+      name: "top_secret"
+      description: "Top secret information"
+
+  excluded_zones:
+    - "quarantine"     # Unverified or untrusted memory regions
+    - "audit_hold"      # Memory under audit review
+    - "pending_verify"  # Memory awaiting verification
+
+# --- Memory Types ---
+memory_types:
+  episodic:
+    name: "Episodic Memory"
+    description: "Event and experience records"
+    default_relevance_window: 86400  # 24 hours in seconds
+    retention_policy: "adaptive"
+
+  semantic:
+    name: "Semantic Memory"
+    description: "Knowledge and fact records"
+    default_relevance_window: 604800  # 7 days in seconds
+    retention_policy: "persistent"
+
+  artifact:
+    name: "Artifact Memory"
+    description: "Generated artifacts and documents"
+    default_relevance_window: 259200  # 3 days in seconds
+    retention_policy: "versioned"
+
+  shared:
+    name: "Shared Memory"
+    description: "Collaboratively generated shared records"
+    default_relevance_window: 172800  # 2 days in seconds
+    retention_policy: "collaborative"
+
+  working:
+    name: "Working Memory"
+    description: "Temporary scratch space for active tasks"
+    default_relevance_window: 3600   # 1 hour in seconds
+    retention_policy: "ephemeral"
+
+# --- Agent Roles ---
+agent_roles:
+  planner:
+    name: "Planner Agent"
+    description: "Responsible for task planning and constraint analysis"
+    default_scopes: ["task_shared", "session", "workspace"]
+    default_memory_types: ["semantic", "artifact", "shared"]
+    rerank_weights:
+      summary_score: 0.4
+      constraint_relevance: 0.3
+      recency: 0.2
+      authority: 0.1
+
+  solver:
+    name: "Solver Agent"
+    description: "Responsible for solving sub-tasks with factual support"
+    default_scopes: ["task_shared", "session", "agent_private"]
+    default_memory_types: ["episodic", "artifact", "working"]
+    rerank_weights:
+      factual_relevance: 0.5
+      precision: 0.3
+      recency: 0.1
+      authority: 0.1
+
+  verifier:
+    name: "Verifier Agent"
+    description: "Responsible for verifying evidence provenance and reliability"
+    default_scopes: ["task_shared", "session", "governed"]
+    default_memory_types: ["episodic", "semantic"]
+    rerank_weights:
+      provenance_score: 0.4
+      source_reliability: 0.3
+      timestamp_relevance: 0.2
+      authority: 0.1
+
+  critic:
+    name: "Critic Agent"
+    description: "Responsible for identifying conflicts and edge cases"
+    default_scopes: ["task_shared", "session"]
+    default_memory_types: ["episodic", "shared", "artifact"]
+    rerank_weights:
+      conflict_score: 0.4
+      edge_case_relevance: 0.3
+      failure_case_relevance: 0.2
+      recency: 0.1
+
+  memory_manager:
+    name: "Memory Manager Agent"
+    description: "Responsible for memory lifecycle management"
+    default_scopes: ["task_shared", "session", "workspace", "governed"]
+    default_memory_types: ["episodic", "semantic", "artifact", "shared"]
+    rerank_weights:
+      completeness: 0.4
+      organization_score: 0.3
+      retention_relevance: 0.2
+      authority: 0.1
+
+# --- Embedding Model Settings ---
+embedding:
+  provider: "openai"                  # openai, huggingface, local, custom
+  model_name: "text-embedding-3-small"
+  batch_size: 32
+  device: "cpu"                       # cpu, cuda, mps
+  normalize: true                     # Normalize embeddings to unit length
+  timeout: 30                         # Timeout for embedding API calls
+
+  # Provider-specific settings
+  openai:
+    api_base: "https://api.openai.com/v1"
+    model: "text-embedding-3-small"
+    dimensions: 1536                  # Will override query_embedding_dim if set
+
+  huggingface:
+    model_name: "sentence-transformers/all-MiniLM-L6-v2"
+    device: "cpu"
+    normalize: true
+
+# --- Memory Storage Settings ---
+storage:
+  backend: "inmemory"                 # inmemory, chromadb, faiss, qdrant, milvus, custom
+  persist_dir: "./coscope_data/storage"
+  enable_persistence: false
+
+  # Vector store specific settings
+  chromadb:
+    collection_name: "coscope_memories"
+    distance_metric: "cosine"
+
+  faiss:
+    index_type: "IDMap2,SQ8"          # FAISS index type
+    nlist: 100                        # Number of clusters
+
+  qdrant:
+    collection_name: "coscope_memories"
+    vector_size: 1536
+    distance: "Cosine"
+
+# --- Agent Framework Integration ---
+agent_framework:
+  framework: "langchain"              # langchain, langgraph, raw
+  enable_langgraph: false
+  langgraph_config:
+    checkpoint_enabled: true
+    checkpoint_dir: "./coscope_data/checkpoints"
+    interrupt_before_nodes: []
+    interrupt_after_nodes: []
+
+# --- Evaluation Settings ---
+evaluation:
+  enabled: false
+  output_dir: "./coscope_data/eval_results"
+  baselines:
+    - name: "independent_retrieval"
+      enabled: true
+    - name: "naive_shared_retrieval"
+      enabled: true
+    - name: "shared_candidate_with_rerank"
+      enabled: true
+    - name: "shared_candidate_no_fallback"
+      enabled: true
+
+  metrics:
+    - recall@k
+    - mrr@k
+    - evidence_hit_rate
+    - answer_support_rate
+    - first_stage_retrieval_count
+    - duplicate_candidate_rate
+    - candidate_reuse_rate
+    - fallback_trigger_rate
+    - average_latency
+
+# --- Logging Settings ---
+logging:
+  level: "INFO"                      # DEBUG, INFO, WARNING, ERROR
+  structured: false                  # JSON formatted logs
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  log_dir: "./coscope_data/logs"
+
+# --- Advanced Settings ---
+advanced:
+  experimental_features: false
+  enable_metrics_collection: true
+  metrics_flush_interval: 60
+  enable_profiling: false
+  profiler_output_dir: "./coscope_data/profiles"

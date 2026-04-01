@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coscope"
+version = "0.1.0"
+description = "Collaborative Memory Retrieval Framework for Multi-Agent Systems"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "CoScope Authors"}
+]
+keywords = ["multi-agent", "memory", "retrieval", "mas", "rag", "collaborative", "langchain", "langgraph"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24.0",
+    "pydantic>=2.0.0",
+    "tenacity>=8.2.0",
+]
+
+[project.optional-dependencies]
+langchain = [
+    "langchain>=0.1.0",
+    "langchain-core>=0.1.0",
+]
+langgraph = [
+    "langgraph>=0.0.20",
+    "langchain-core>=0.1.0",
+    "langchain>=0.1.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+all = [
+    "coscope[langchain,langgraph,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/CoScope"
+Repository = "https://github.com/your-org/CoScope"
+Documentation = "https://github.com/your-org/CoScope#readme"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["coscope*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "RUF"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
