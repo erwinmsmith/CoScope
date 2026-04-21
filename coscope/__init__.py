@@ -16,7 +16,12 @@ Example usage:
 
 __version__ = "0.1.0"
 
-from coscope.engine import CoScope, create_coscope
+# v2.1: engine import disabled until `coscope.retrieval.pipeline` is implemented.
+# `coscope.data` subpackage does not depend on the CoScope engine.
+# from coscope.engine import CoScope, create_coscope
+CoScope = None          # type: ignore[assignment]
+create_coscope = None   # type: ignore[assignment]
+
 from coscope.core.types import (
     Agent,
     AgentConfig,

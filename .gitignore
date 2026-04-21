@@ -85,6 +85,9 @@ coscope_data/
 *.log
 logs/
 
+# Dataset artifacts and local-only data workspace (not tracked in git)
+data/
+
 # Temporary files
 *.tmp
 *.bak
