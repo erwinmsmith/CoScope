@@ -175,6 +175,96 @@ reranker = RoleAwareReranker()
 fusion = ReciprocalRankFusion(k=60)
 ```
 
+### Experiment Variants
+
+The retrieval pipeline supports the no-training ablation modes described in the
+design document:
+
+```python
+# A1: per-agent independent retrieval
+results = coscope.retrieve(requests, variant="a1")
+
+# A3: scope-only shared retrieval with mean query embedding
+results = coscope.retrieve(requests, variant="a3")
+
+# A4: shared mean retrieval + personalized rerank + private fallback
+results = coscope.retrieve(requests, variant="a4")
+
+# A5: query matrix + unsupervised truncated SVD + rerank + fallback
+results = coscope.retrieve(requests, variant="a5")
+```
+
+You can also set the default in `config.yaml`:
+
+```yaml
+retrieval:
+  variant: "a5"
+```
+
+### Minimal Evaluation
+
+```python
+from coscope.evaluation import evaluate_retrieval
+
+results = coscope.retrieve(requests, variant="a5")
+stats = coscope.get_stats()["pipeline_stats"]
+
+gold_by_request = {
+    requests[0].request_id: ["mem_gold_1"],
+    requests[1].request_id: ["mem_gold_1", "mem_gold_2"],
+}
+
+report = evaluate_retrieval(
+    results,
+    gold_by_request,
+    k=10,
+    pipeline_stats=stats,
+    conflict_request_ids=["req_verifier_s4"],
+)
+
+print(report.to_dict())
+```
+
+The report includes `recall_at_k`, `mrr_at_k`,
+`first_stage_savings`, and `false_merge_rate`.
+
+To compare all no-training variants in one pass:
+
+```python
+from coscope.evaluation import evaluate_variants, format_variant_table
+
+runs = evaluate_variants(
+    coscope,
+    requests,
+    gold_by_request,
+    k=10,
+    conflict_request_ids=["req_verifier_s4"],
+)
+
+print(format_variant_table(runs))
+```
+
+There is also a runnable toy example:
+
+```bash
+python -m coscope.examples.evaluate_variants
+```
+
+For a slightly broader synthetic suite covering S1/S2/S3/S4-style cases:
+
+```bash
+python -m coscope.examples.evaluate_synthetic
+```
+
+Programmatic use:
+
+```python
+from coscope.evaluation import evaluate_synthetic_suite, format_synthetic_table
+
+summaries = evaluate_synthetic_suite(k=3)
+print(format_synthetic_table(summaries))
+```
+
 ## Agent Framework Integration
 
 ### LangChain

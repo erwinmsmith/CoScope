@@ -412,19 +412,14 @@ class PolicyCompatibilityChecker:
         if not set(policy1.visibility) & set(policy2.visibility):
             return False
 
-        # At least one clearance level must be satisfied by both
-        max_clear1 = policy1.max_clearance
-        max_clear2 = policy2.max_clearance
-        if max_clear1 != max_clear2:
-            # Allow if the lower clearance is compatible with higher
-            pass  # Currently allow all clearance levels
+        if policy1.max_clearance != policy2.max_clearance:
+            return False
 
-        # Excluded zones check
-        if "quarantine" in policy1.excluded_zones and "quarantine" not in policy2.excluded_zones:
-            # Potential issue but not incompatible
-            pass
-        if "quarantine" in policy2.excluded_zones and "quarantine" not in policy1.excluded_zones:
-            pass
+        if set(policy1.excluded_zones) != set(policy2.excluded_zones):
+            return False
+
+        if policy1.audit_required != policy2.audit_required:
+            return False
 
         return True
 

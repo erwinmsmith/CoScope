@@ -73,9 +73,11 @@ class RandomEmbeddingProvider:
     def embed_query(self, query: str) -> "np.ndarray":
         """Generate a random embedding for a query."""
         import numpy as np
+        import hashlib
 
         # Deterministic based on query hash
-        seed = hash(query) % (2**32)
+        digest = hashlib.md5(query.encode("utf-8")).hexdigest()
+        seed = int(digest[:8], 16)
         rng = np.random.RandomState(seed)
         embedding = rng.randn(self.dimension).astype("float32")
         # L2 normalize
@@ -270,7 +272,8 @@ class CoScope:
 
         root_logger = logging.getLogger("coscope")
         root_logger.setLevel(level)
-        root_logger.addHandler(handler)
+        if not root_logger.handlers:
+            root_logger.addHandler(handler)
 
     def _create_embedding_provider(self) -> EmbeddingProvider:
         """Create an embedding provider based on configuration."""
@@ -294,7 +297,7 @@ class CoScope:
                 )
         elif provider_type == "random":
             return RandomEmbeddingProvider(
-                dimension=self.config.embedding.openai.get("dimensions", 1536)
+                dimension=self.config.retrieval.query_embedding_dim
             )
         else:
             # Default to random for development
@@ -320,6 +323,7 @@ class CoScope:
             query_embedding_dim=self.config.retrieval.query_embedding_dim,
             projection_dim=self.config.retrieval.projection_dim,
             svd_rank=self.config.retrieval.svd_rank,
+            variant=self.config.retrieval.variant,
             use_sparse_mask=self.config.retrieval.enable_sparse_mask,
             shared_top_k=self.config.retrieval.shared_top_k,
             rerank_top_k=self.config.retrieval.rerank_top_k,
@@ -590,6 +594,7 @@ class CoScope:
         self,
         requests: List[RetrievalRequest],
         fit_projection: bool = True,
+        variant: Optional[str] = None,
     ) -> List[RetrievalResult]:
         """
         Execute collaborative retrieval for multiple requests.
@@ -599,6 +604,7 @@ class CoScope:
         Args:
             requests: List of retrieval requests
             fit_projection: Whether to fit projection on this batch
+            variant: Optional experiment variant override (a1, a3, a4, a5)
 
         Returns:
             List of RetrievalResults
@@ -608,7 +614,13 @@ class CoScope:
 
         logger.info(f"Executing retrieval for {len(requests)} requests")
 
-        results = self.pipeline.retrieve(requests, fit_projection=fit_projection)
+        previous_variant = self.pipeline.config.variant
+        if variant is not None:
+            self.pipeline.config.variant = variant
+        try:
+            results = self.pipeline.retrieve(requests, fit_projection=fit_projection)
+        finally:
+            self.pipeline.config.variant = previous_variant
 
         logger.info(f"Retrieved results for {len(results)} requests")
 
@@ -631,8 +643,9 @@ class CoScope:
         Returns:
             Single RetrievalResult
         """
+        variant = kwargs.pop("variant", None)
         request = self.create_request(agent_id=agent_id, query=query, **kwargs)
-        results = self.retrieve([request])
+        results = self.retrieve([request], variant=variant)
 
         return results[0] if results else None
 

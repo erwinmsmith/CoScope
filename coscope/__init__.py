@@ -16,11 +16,7 @@ Example usage:
 
 __version__ = "0.1.0"
 
-# v2.1: engine import disabled until `coscope.retrieval.pipeline` is implemented.
-# `coscope.data` subpackage does not depend on the CoScope engine.
-# from coscope.engine import CoScope, create_coscope
-CoScope = None          # type: ignore[assignment]
-create_coscope = None   # type: ignore[assignment]
+from coscope.engine import CoScope, create_coscope
 
 from coscope.core.types import (
     Agent,
@@ -40,6 +36,19 @@ from coscope.core.types import (
 )
 from coscope.memory.store import MemoryManager, InMemoryMemoryStore
 from coscope.config.settings import CoScopeConfig, get_config
+from coscope.evaluation import (
+    EvaluationReport,
+    SyntheticCase,
+    SyntheticVariantSummary,
+    VariantRun,
+    build_synthetic_suite,
+    evaluate_synthetic_suite,
+    evaluate_retrieval,
+    evaluate_variants,
+    format_synthetic_case_tables,
+    format_synthetic_table,
+    format_variant_table,
+)
 
 __all__ = [
     # Version
@@ -68,4 +77,16 @@ __all__ = [
     # Config
     "CoScopeConfig",
     "get_config",
+    # Evaluation
+    "EvaluationReport",
+    "SyntheticCase",
+    "SyntheticVariantSummary",
+    "VariantRun",
+    "build_synthetic_suite",
+    "evaluate_synthetic_suite",
+    "evaluate_retrieval",
+    "evaluate_variants",
+    "format_synthetic_case_tables",
+    "format_synthetic_table",
+    "format_variant_table",
 ]

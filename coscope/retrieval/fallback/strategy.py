@@ -122,11 +122,16 @@ class PrivateFallbackRetriever(FallbackRetriever):
     ) -> List["RetrievedCandidate"]:
         """Fetch candidates from private scopes."""
         all_candidates = []
+        query_embedding = (
+            self.embedding_provider.embed_query(request.query)
+            if self.embedding_provider
+            else np.zeros(1, dtype="float32")
+        )
 
         for scope_id in request.scope.private_scopes:
             for mem_type in request.memory_types:
                 candidates = self.memory_store.search(
-                    query_embedding=np.zeros(512),
+                    query_embedding=query_embedding,
                     scope_filter=[scope_id],
                     memory_type_filter=[mem_type],
                     policy_filter=request.policy,
