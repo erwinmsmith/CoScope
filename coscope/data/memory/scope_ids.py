@@ -38,6 +38,6 @@ LAYER_VISIBILITY = {
     "workspace_semantic_global": "public",
     "workspace_semantic_hop": "public",
     "task_shared_episodic": "team",
-    "agent_private": "owner",
+    "agent_private": "private",
     "restricted": "restricted",
 }

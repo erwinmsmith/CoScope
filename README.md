@@ -15,6 +15,7 @@ CoScope is a framework for efficient collaborative memory retrieval in multi-age
 - **Prompt Management**: Separated prompt templates for easy customization
 - **Memory CRUD**: High-level memory operations interface
 - **LangChain/LangGraph Integration**: Seamlessly integrate with existing agent frameworks
+- **GoT-MAS Dataset Pipeline**: Build Graph-of-Thought multi-agent datasets (GSM8K, MATH, HotpotQA, 2WikiMultiHopQA, MusiqueQA) with memory scope construction, episode building, and rho evaluation
 
 ## Architecture
 
@@ -35,14 +36,26 @@ coscope/
 │   └── crud/          # High-level memory operations
 ├── prompts/           # Prompt template management
 ├── agents/            # Agent integrations (LangChain/LangGraph)
-└── examples/          # Usage examples
+├── examples/          # Usage examples
+└── data/              # GoT-MAS dataset construction pipeline
+    ├── agents/         # Planner, Solver, Verifier agent builders
+    ├── auth/           # Access control, policy validation, S4 checker
+    ├── core/           # Core types (GoTGraph, GoTNode, etc.)
+    ├── cot/            # Chain-of-Thought node types
+    ├── got/            # Graph-of-Thought graph builder, templates, rho calculator
+    ├── loaders/        # Dataset loaders (GSM8K, MATH, HotpotQA, Musique, Wiki)
+    ├── memory/         # Memory scope builders (workspace, task-shared, private, restricted)
+    ├── output/         # Serialization, stats reporter, validator
+    ├── pipeline/       # Dataset pipeline and episode builder
+    ├── scripts/        # Build, compute-rho, smoke-test utilities
+    └── split/          # Train/dev/test split manager
 ```
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/CoScope.git
+git clone https://github.com/erwinmsmith/CoScope.git
 cd CoScope
 
 # Install core dependencies
@@ -56,6 +69,8 @@ pip install -e ".[langgraph]"
 ```
 
 ## Quick Start
+
+### Memory Retrieval
 
 ```python
 from coscope import CoScope
@@ -87,6 +102,24 @@ for result in results:
     print(f"Agent: {result.agent_id}")
     for candidate in result.candidates[:5]:
         print(f"  - {candidate.memory.content}")
+```
+
+### Dataset Construction (GoT-MAS Pipeline)
+
+```python
+from coscope.data.pipeline import EpisodeBuilder
+from coscope.data.loaders import GSM8KLoader
+
+# Load dataset
+loader = GSM8KLoader()
+raw_items = loader.load(split="train", limit=100)
+
+# Build episodes with GoT graph
+builder = EpisodeBuilder()
+episodes = builder.build_all(raw_items, dataset="gsm8k")
+
+for ep in episodes:
+    print(f"Episode {ep.episode_id}: {len(ep.nodes)} nodes, {len(ep.memories)} memories")
 ```
 
 ## Configuration
