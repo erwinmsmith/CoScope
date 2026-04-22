@@ -26,7 +26,11 @@ from coscope.data.core.types import (
     SubsetLabel,
 )
 from coscope.data.output.serializer import Serializer
-from coscope.data.output.stats_reporter import StatsReporter, SubsetCoverageError
+from coscope.data.output.stats_reporter import (
+    DatasetQualityError,
+    StatsReporter,
+    SubsetCoverageError,
+)
 from coscope.data.pipeline.dataset_pipeline import DatasetPipeline
 from coscope.data.pipeline.episode_builder import EpisodeBuilder
 
@@ -97,6 +101,7 @@ __all__ = [
     "Serializer",
     "StatsReporter",
     "SubsetCoverageError",
+    "DatasetQualityError",
     # Re-exported types
     "Episode",
     "GoTGraph",

@@ -86,7 +86,8 @@ coscope_data/
 logs/
 
 # Dataset artifacts and local-only data workspace (not tracked in git)
-data/
+# Leading slash anchors to repo root so coscope/data/ (source code) is NOT ignored.
+/data/
 
 # Temporary files
 *.tmp

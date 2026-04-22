@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Set
 
 from coscope.data.core.types import Episode, SubsetLabel
+from coscope.data.split.subset_assigner import (
+    SubsetThresholds,
+    load_default_thresholds,
+)
 
 
 @dataclass
@@ -31,6 +35,9 @@ class BatchValidationResult:
 
 class BatchValidator:
     """Check invariants across a collection of episodes."""
+
+    def __init__(self, thresholds: "SubsetThresholds | None" = None):
+        self.thresholds = thresholds or load_default_thresholds()
 
     def validate(self, episodes: Iterable[Episode]) -> BatchValidationResult:
         result = BatchValidationResult()
@@ -73,23 +80,24 @@ class BatchValidator:
                     f"must be test"
                 )
 
-    @staticmethod
     def _check_subset_rho_consistency(
-        episodes: List[Episode], result: BatchValidationResult
+        self, episodes: List[Episode], result: BatchValidationResult
     ) -> None:
+        s1_min = self.thresholds.s1_min
+        s2_min = self.thresholds.s2_min
         for ep in episodes:
             rho = ep.rho
             expected: SubsetLabel
-            if rho > 0.7:
+            if rho > s1_min:
                 expected = SubsetLabel.S1
-            elif rho > 0.4:
+            elif rho > s2_min:
                 expected = SubsetLabel.S2
             else:
                 expected = SubsetLabel.S3
             if ep.rho_subset != expected:
                 result.add_warning(
                     f"episode {ep.episode_id}: rho={rho} but rho_subset={ep.rho_subset.value} "
-                    f"(expected {expected.value})"
+                    f"(expected {expected.value} under thresholds s1>{s1_min}, s2>{s2_min})"
                 )
 
     @staticmethod

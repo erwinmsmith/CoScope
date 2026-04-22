@@ -58,6 +58,7 @@ class DatasetPipeline:
         limit: Optional[int] = None,
         enforce_coverage: bool = True,
         require_s4: Optional[bool] = None,
+        enforce_quality: bool = True,
     ) -> Dict[str, int]:
         """
         Run the pipeline end-to-end for one (dataset, split) slice.
@@ -89,10 +90,11 @@ class DatasetPipeline:
                 raw_items, dataset, split, target_graph_types, seed
             )
 
+        # Episodes that will actually land in this split's shards
+        # (S4 episodes are dropped outside `test`).
+        kept = [ep for ep in episodes if not (ep.s4_eligible and split != "test")]
+
         if enforce_coverage:
-            # Check coverage on the episodes that will actually land in this
-            # split's shards (S4 episodes are dropped outside `test`).
-            kept = [ep for ep in episodes if not (ep.s4_eligible and split != "test")]
             need_s4 = require_s4 if require_s4 is not None else (split == "test")
             self.stats_reporter.check_coverage(
                 kept,
@@ -100,6 +102,14 @@ class DatasetPipeline:
                 require_s4=need_s4,
                 dataset=dataset,
             )
+
+        if enforce_quality:
+            # §16.2 hard quality gate: raises DatasetQualityError on failure.
+            qr = self.stats_reporter.check_quality(
+                kept, dataset=dataset, split=split, strict=True
+            )
+            for w in qr.get("warnings", []):
+                logger.warning("[quality] %s", w)
 
         return self._write_shards(episodes, dataset=dataset, split=split)
 
