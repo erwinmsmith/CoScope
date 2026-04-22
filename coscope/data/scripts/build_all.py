@@ -46,6 +46,9 @@ def main() -> None:
     parser.add_argument("--splits", nargs="+", default=["dev"])
     parser.add_argument("--data-dir", default="data/raw")
     parser.add_argument("--processed-dir", default="data/processed")
+    parser.add_argument("--reasoning-path-type", default="got",
+                        choices=["got", "cot", "tot"],
+                        help="Subdirectory under processed/ (default: got)")
     parser.add_argument("--max-workers", type=int, default=1)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--include-s4", action="store_true", default=True,
@@ -62,6 +65,7 @@ def main() -> None:
     pipeline = DatasetPipeline(
         processed_dir=args.processed_dir,
         data_dir=args.data_dir,
+        reasoning_path_type=args.reasoning_path_type,
     )
 
     for dataset in args.datasets:

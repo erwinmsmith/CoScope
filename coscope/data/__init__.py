@@ -59,9 +59,11 @@ def load_episodes(
     subsets: Optional[Sequence[str]] = None,
     graph_types: Optional[Sequence[str]] = None,
     processed_dir: Union[str, Path] = "data/processed",
+    reasoning_path_type: str = "got",
 ) -> List[Episode]:
     """
-    Load previously serialized episodes from `data/processed/<dataset>/<split>/`.
+    Load previously serialized episodes from
+    `{processed_dir}/{reasoning_path_type}/<dataset>/<split>/`.
 
     Args:
         dataset: dataset name (e.g. "musique").
@@ -69,10 +71,16 @@ def load_episodes(
         subsets: optional filter, e.g. ["S1", "S2", "S4"].
         graph_types: optional filter on graph_type values (e.g. ["LINEAR"]).
         processed_dir: override for the processed root directory.
+        reasoning_path_type: "got" | "cot" | "tot" (default "got").
     """
-    root = Path(processed_dir) / dataset / split
+    root = Path(processed_dir) / reasoning_path_type.lower() / dataset / split
     if not root.exists():
-        return []
+        # Backward compatibility: fall back to legacy flat layout if present.
+        legacy = Path(processed_dir) / dataset / split
+        if legacy.exists():
+            root = legacy
+        else:
+            return []
     serializer = Serializer()
     wanted_subsets = {s.lower() for s in subsets} if subsets else None
     wanted_graph_types = {g.lower() for g in graph_types} if graph_types else None

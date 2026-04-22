@@ -37,12 +37,19 @@ class DatasetPipeline:
         stats_reporter: Optional[StatsReporter] = None,
         processed_dir: Union[str, Path] = "data/processed",
         data_dir: Union[str, Path] = "data/raw",
+        reasoning_path_type: str = "got",
     ):
         self.episode_builder = episode_builder or EpisodeBuilder()
         self.serializer = serializer or Serializer()
         self.stats_reporter = stats_reporter or StatsReporter()
         self.processed_dir = Path(processed_dir)
         self.data_dir = Path(data_dir)
+        self.reasoning_path_type = reasoning_path_type.lower()
+
+    @property
+    def reasoning_root(self) -> Path:
+        """Return {processed_dir}/{reasoning_path_type}/ — root for all shards."""
+        return self.processed_dir / self.reasoning_path_type
 
     # ------------------------------------------------------------------
 
@@ -199,13 +206,13 @@ class DatasetPipeline:
             shard_episodes[shard_name].append(ep)
 
         written: Dict[str, int] = {}
-        split_dir = self.processed_dir / dataset / split
+        split_dir = self.reasoning_root / dataset / split
         split_dir.mkdir(parents=True, exist_ok=True)
         for shard_name, eps in shard_episodes.items():
             path = split_dir / shard_name
             written[str(path)] = self.serializer.write_jsonl(path, eps)
 
-        stats_path = self.processed_dir / dataset / "stats" / f"{split}_stats.json"
+        stats_path = self.reasoning_root / dataset / "stats" / f"{split}_stats.json"
         self.stats_reporter.write(episodes, path=stats_path, dataset=dataset, split=split)
         written[str(stats_path)] = 1
 

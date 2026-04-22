@@ -99,3 +99,4 @@ logs/
 *.key
 secrets/
 credentials/
+CLAUDE.md
