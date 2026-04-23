@@ -55,6 +55,8 @@ class WeightedReranker(CandidateReranker):
             for extractor in self.extractors:
                 score = extractor.extract(query, candidate, role, state)
                 name = extractor.name
+                if name == "summaryscore":
+                    name = "summary"
                 features[name] = score
 
                 weight = self.weights.get(name, 0.0)

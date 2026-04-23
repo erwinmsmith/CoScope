@@ -130,11 +130,7 @@ class HierarchicalRouter(ScopeRouter):
             remaining = remaining[1:]
             compatible = [current]
 
-            for i, other in enumerate(remaining):
-                if self.policy_checker.are_compatible(current.policy, other.policy):
-                    compatible.append(other)
-
-            # Remove compatible from remaining
+            # Move compatible requests from remaining into the current bucket.
             for i in reversed(range(len(remaining))):
                 if self.policy_checker.are_compatible(current.policy, remaining[i].policy):
                     compatible.append(remaining[i])

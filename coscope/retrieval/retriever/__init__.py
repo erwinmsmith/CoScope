@@ -1,6 +1,6 @@
 """Retrieval Retriever Module."""
 
-from coscope.retrieval.retriever.base import CandidateRetriever
+from coscope.retrieval.retriever.base import CandidatePool, CandidateRetriever, RetrievalContext
 from coscope.retrieval.retriever.shared import SharedCandidateRetriever
 from coscope.retrieval.retriever.similarity import (
     SimilarityStrategy,
@@ -10,6 +10,8 @@ from coscope.retrieval.retriever.similarity import (
 
 __all__ = [
     "CandidateRetriever",
+    "CandidatePool",
+    "RetrievalContext",
     "SharedCandidateRetriever",
     "SimilarityStrategy",
     "CosineSimilarity",

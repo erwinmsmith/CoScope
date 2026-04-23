@@ -119,25 +119,48 @@ class SharedCandidateRetriever(CandidateRetriever):
         entries = []
         embeddings = []
 
-        for scope_id in context.scope_spec.all_scopes:
-            for mem_type in context.memory_types:
-                candidates = self.memory_store.search(
-                    query_embedding=np.zeros(512),
-                    scope_filter=[scope_id],
-                    memory_type_filter=[mem_type],
-                    policy_filter=context.policy,
-                    top_k=limit * 2,
-                )
+        scope_ids = set(context.scope_spec.all_scopes)
+        memory_types = set(context.memory_types)
 
-                for candidate in candidates:
-                    entries.append(candidate.memory)
-                    if candidate.memory.embedding is not None:
-                        embeddings.append(candidate.memory.embedding)
-                    elif self.embedding_provider:
-                        embeddings.append(
-                            self.embedding_provider.embed_query(candidate.memory.content)
-                        )
-                    else:
-                        embeddings.append(np.zeros(512))
+        if hasattr(self.memory_store, "_entries"):
+            for memory in self.memory_store._entries.values():
+                if scope_ids and memory.scope_id not in scope_ids:
+                    continue
+                if memory_types and memory.memory_type not in memory_types:
+                    continue
+                if memory.is_expired():
+                    continue
+                if hasattr(self.memory_store, "_check_policy"):
+                    if not self.memory_store._check_policy(memory, context.policy):
+                        continue
+                entries.append(memory)
+                embeddings.append(self._embedding_for(memory))
+        else:
+            probe = (
+                self.embedding_provider.embed_query("")
+                if self.embedding_provider
+                else np.zeros(1)
+            )
+            for scope_id in scope_ids:
+                for mem_type in memory_types:
+                    candidates = self.memory_store.search(
+                        query_embedding=probe,
+                        scope_filter=[scope_id],
+                        memory_type_filter=[mem_type],
+                        policy_filter=context.policy,
+                        top_k=limit * 2,
+                    )
+
+                    for candidate in candidates:
+                        entries.append(candidate.memory)
+                        embeddings.append(self._embedding_for(candidate.memory))
 
         return entries, embeddings
+
+    def _embedding_for(self, memory: MemoryEntry) -> np.ndarray:
+        """Return a usable embedding for a memory entry."""
+        if memory.embedding is not None:
+            return memory.embedding
+        if self.embedding_provider:
+            return self.embedding_provider.embed_query(memory.content)
+        return np.zeros(1, dtype="float32")

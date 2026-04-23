@@ -9,6 +9,7 @@ retrieval:
   query_embedding_dim: 1024          # Query embedding dimension (k)
   projection_dim: 256                 # Intermediate projection dimension (l)
   svd_rank: 64                       # Effective rank for SVD subspace extraction (r)
+  variant: "a5"                      # Experiment mode: a1, a3, a4, or a5
   shared_top_k: 50                    # Top-k candidates per query in shared retrieval
   rerank_top_k: 20                    # Top-k candidates after agent-specific reranking
   max_batch_size: 100                 # Maximum requests per batch

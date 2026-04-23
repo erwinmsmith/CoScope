@@ -13,7 +13,7 @@ Modular retrieval system with the following sub-modules:
 """
 
 # Main pipeline and types
-from coscope.retrieval.pipeline import RetrievalPipeline
+from coscope.retrieval.pipeline import PipelineConfig, RetrievalPipeline, create_pipeline
 
 # Encoder module
 from coscope.retrieval.encoder import (
@@ -74,6 +74,8 @@ from coscope.retrieval.fusion import (
 __all__ = [
     # Pipeline
     "RetrievalPipeline",
+    "PipelineConfig",
+    "create_pipeline",
     # Encoder
     "RequestEncoder",
     "EncodingResult",

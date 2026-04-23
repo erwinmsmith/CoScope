@@ -37,12 +37,19 @@ class DatasetPipeline:
         stats_reporter: Optional[StatsReporter] = None,
         processed_dir: Union[str, Path] = "data/processed",
         data_dir: Union[str, Path] = "data/raw",
+        reasoning_path_type: str = "got",
     ):
         self.episode_builder = episode_builder or EpisodeBuilder()
         self.serializer = serializer or Serializer()
         self.stats_reporter = stats_reporter or StatsReporter()
         self.processed_dir = Path(processed_dir)
         self.data_dir = Path(data_dir)
+        self.reasoning_path_type = reasoning_path_type.lower()
+
+    @property
+    def reasoning_root(self) -> Path:
+        """Return {processed_dir}/{reasoning_path_type}/ — root for all shards."""
+        return self.processed_dir / self.reasoning_path_type
 
     # ------------------------------------------------------------------
 
@@ -58,6 +65,7 @@ class DatasetPipeline:
         limit: Optional[int] = None,
         enforce_coverage: bool = True,
         require_s4: Optional[bool] = None,
+        enforce_quality: bool = True,
     ) -> Dict[str, int]:
         """
         Run the pipeline end-to-end for one (dataset, split) slice.
@@ -89,10 +97,11 @@ class DatasetPipeline:
                 raw_items, dataset, split, target_graph_types, seed
             )
 
+        # Episodes that will actually land in this split's shards
+        # (S4 episodes are dropped outside `test`).
+        kept = [ep for ep in episodes if not (ep.s4_eligible and split != "test")]
+
         if enforce_coverage:
-            # Check coverage on the episodes that will actually land in this
-            # split's shards (S4 episodes are dropped outside `test`).
-            kept = [ep for ep in episodes if not (ep.s4_eligible and split != "test")]
             need_s4 = require_s4 if require_s4 is not None else (split == "test")
             self.stats_reporter.check_coverage(
                 kept,
@@ -100,6 +109,14 @@ class DatasetPipeline:
                 require_s4=need_s4,
                 dataset=dataset,
             )
+
+        if enforce_quality:
+            # §16.2 hard quality gate: raises DatasetQualityError on failure.
+            qr = self.stats_reporter.check_quality(
+                kept, dataset=dataset, split=split, strict=True
+            )
+            for w in qr.get("warnings", []):
+                logger.warning("[quality] %s", w)
 
         return self._write_shards(episodes, dataset=dataset, split=split)
 
@@ -189,13 +206,13 @@ class DatasetPipeline:
             shard_episodes[shard_name].append(ep)
 
         written: Dict[str, int] = {}
-        split_dir = self.processed_dir / dataset / split
+        split_dir = self.reasoning_root / dataset / split
         split_dir.mkdir(parents=True, exist_ok=True)
         for shard_name, eps in shard_episodes.items():
             path = split_dir / shard_name
             written[str(path)] = self.serializer.write_jsonl(path, eps)
 
-        stats_path = self.processed_dir / dataset / "stats" / f"{split}_stats.json"
+        stats_path = self.reasoning_root / dataset / "stats" / f"{split}_stats.json"
         self.stats_reporter.write(episodes, path=stats_path, dataset=dataset, split=split)
         written[str(stats_path)] = 1
 

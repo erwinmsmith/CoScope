@@ -116,15 +116,15 @@ class PolicyConstraints:
         if not set(self.visibility) & set(other.visibility):
             return False
 
-        # Clearance levels must be compatible
+        # Shared retrieval only happens when policy boundaries are equivalent.
         if self.max_clearance != other.max_clearance:
-            # Allow if one is subset of another
-            pass  # Allow by default unless explicitly restricted
+            return False
 
-        # Check excluded zones overlap
         if set(self.excluded_zones) != set(other.excluded_zones):
-            # Policies differ on excluded zones but may still be compatible
-            pass
+            return False
+
+        if self.audit_required != other.audit_required:
+            return False
 
         return True
 

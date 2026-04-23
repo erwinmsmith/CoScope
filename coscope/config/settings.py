@@ -21,7 +21,7 @@ from functools import lru_cache
 from dotenv import load_dotenv
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Load .env file if present
 _load_env_done = False
@@ -43,6 +43,7 @@ class RetrievalConfig(BaseModel):
     query_embedding_dim: int = 1024
     projection_dim: int = 256
     svd_rank: int = 64
+    variant: str = "a5"
     shared_top_k: int = 50
     rerank_top_k: int = 20
     max_batch_size: int = 100
@@ -201,6 +202,8 @@ class LLMConfig(BaseModel):
 
 
 class EmbeddingProviderConfig(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     provider: str = "openai"
     model_name: str = "text-embedding-3-small"
     batch_size: int = 32
@@ -210,6 +213,8 @@ class EmbeddingProviderConfig(BaseModel):
 
 
 class EmbeddingConfig(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     provider: str = "openai"
     model_name: str = "text-embedding-3-small"
     batch_size: int = 32
@@ -348,7 +353,7 @@ class ConfigLoader:
     def _load_yaml(self) -> None:
         """Load raw YAML configuration."""
         if self.config_path and Path(self.config_path).exists():
-            with open(self.config_path, "r") as f:
+            with open(self.config_path, "r", encoding="utf-8") as f:
                 self._raw_yaml = yaml.safe_load(f) or {}
 
     def _apply_env_overrides(self, config: CoScopeConfig) -> CoScopeConfig:
@@ -371,6 +376,10 @@ class ConfigLoader:
                 "COSCOPE_SVD_RANK",
                 str(retrieval_data.get("svd_rank", 64))
             )),
+            "variant": os.getenv(
+                "COSCOPE_RETRIEVAL_VARIANT",
+                str(retrieval_data.get("variant", "a5"))
+            ),
             "shared_top_k": int(os.getenv(
                 "COSCOPE_SHARED_TOP_K",
                 str(retrieval_data.get("shared_top_k", 50))

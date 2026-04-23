@@ -176,7 +176,9 @@ class InMemoryMemoryStore:
         """Check if memory satisfies policy constraints."""
         # Check visibility
         if policy.visibility:
-            if not any(v in [m.value for m in memory.visibility] for v in policy.visibility):
+            requested = {v.value if hasattr(v, "value") else str(v) for v in policy.visibility}
+            available = {v.value if hasattr(v, "value") else str(v) for v in memory.visibility}
+            if not requested & available:
                 return False
 
         # Check excluded zones (simplified)
