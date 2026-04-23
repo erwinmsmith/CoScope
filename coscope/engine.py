@@ -22,7 +22,7 @@ from typing import (
 )
 
 from coscope.config.settings import CoScopeConfig, get_config, ConfigLoader
-from coscope.core.scope import PolicyConstraints, ScopeRegistry, ScopeSpec
+from coscope.core.scope import ScopeRegistry
 from coscope.core.types import (
     Agent,
     AgentConfig,

@@ -103,8 +103,8 @@ def main(argv: List[str] | None = None) -> int:
         return 0
 
     print(f"[FAIL] Found {len(violations)} forbidden import(s) under {src_dir}:")
-    for v in violations:
-        print(f"  - {v}")
+    for lineno, module in violations:
+        print(f"  - {lineno}: {module}")
     print()
     print("Forbidden prefixes:")
     for p in FORBIDDEN_IMPORT_PREFIXES:
