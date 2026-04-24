@@ -33,20 +33,32 @@ from coscope.evaluation.jsonl_runner import (
 )
 
 
-def _make_engine_factory(embedder: str, dim: int):
+def _make_engine_factory(embedder: str, dim: int, st_model: str):
     """Return a zero-arg factory creating a fresh CoScope engine.
 
-    - 'random'   : deterministic hash-based embeddings (no API cost, smoke).
-    - 'default'  : let CoScope pick from config.yaml (may need API keys).
+    - 'random' : deterministic hash-based embeddings (no API cost, smoke).
+    - 'st'     : sentence-transformers offline embedder (no API cost, real
+                 semantic signal; first use downloads model weights).
+    - 'default': let CoScope pick from config.yaml (may need API keys).
     """
     embedder = embedder.lower()
     if embedder == "random":
-        def _factory():
+        def _factory_random():
             return CoScope(embedding_provider=RandomEmbeddingProvider(dimension=dim))
-        return _factory
+        return _factory_random
+    if embedder == "st":
+        # Construct the embedder once; reuse across episodes to avoid
+        # re-downloading / re-loading the model per episode.
+        from coscope.embedding import SentenceTransformerEmbedder
+        shared_embedder = SentenceTransformerEmbedder(model_name=st_model)
+        def _factory_st():
+            return CoScope(embedding_provider=shared_embedder)
+        return _factory_st
     if embedder == "default":
         return CoScope
-    raise ValueError(f"Unknown embedder '{embedder}'; expected 'random' or 'default'.")
+    raise ValueError(
+        f"Unknown embedder '{embedder}'; expected one of 'random', 'st', 'default'."
+    )
 
 
 def _expand_shards(patterns: List[str]) -> List[Path]:
@@ -107,16 +119,22 @@ def main() -> int:
     )
     parser.add_argument(
         "--embedder",
-        choices=["random", "default"],
+        choices=["random", "st", "default"],
         default="random",
-        help="'random' uses deterministic hash embeddings (no API); "
-             "'default' follows config.yaml (may require API keys).",
+        help="'random' deterministic hash (smoke, zero setup); "
+             "'st' offline sentence-transformers (no API, first run downloads "
+             "a small model); 'default' follows config.yaml.",
     )
     parser.add_argument(
         "--embedding-dim",
         type=int,
         default=256,
-        help="Embedding dimension used by the random provider.",
+        help="Embedding dimension used by the random provider (ignored by 'st').",
+    )
+    parser.add_argument(
+        "--st-model",
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        help="sentence-transformers model identifier (used only by --embedder=st).",
     )
     args = parser.parse_args()
 
@@ -134,7 +152,7 @@ def main() -> int:
     for p in shard_paths:
         print(f"  - {p}")
 
-    engine_factory = _make_engine_factory(args.embedder, args.embedding_dim)
+    engine_factory = _make_engine_factory(args.embedder, args.embedding_dim, args.st_model)
     episode_runs, stratified = evaluate_jsonl(
         shard_paths=shard_paths,
         variants=args.variants,
