@@ -27,7 +27,7 @@ from coscope.agents import (
     SolverAgentBuilder,
     VerifierAgentBuilder,
 )
-from coscope.auth.policy_validator import PolicyValidator, ValidationResult
+from coscope.memory.crud.auth import PolicyValidator, ValidationResult
 from coscope.core.types import (
     Episode,
     GoTGraph,

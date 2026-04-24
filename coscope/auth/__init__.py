@@ -1,8 +1,16 @@
-"""Auth: access control, policy validation, S4 FMR checks."""
+"""Deprecated: authorization lives under :mod:`coscope.memory.crud.auth`.
 
-from coscope.auth.access_controller import AccessController
-from coscope.auth.policy_validator import PolicyValidator, ValidationResult
-from coscope.auth.s4_checker import check_false_merge, compute_fmr
+This module is a thin re-export kept for backward compatibility. New code
+should import from :mod:`coscope.memory.crud` directly.
+"""
+
+from coscope.memory.crud.auth import (
+    AccessController,
+    PolicyValidator,
+    ValidationResult,
+    check_false_merge,
+    compute_fmr,
+)
 
 __all__ = [
     "AccessController",

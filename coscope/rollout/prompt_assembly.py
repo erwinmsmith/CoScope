@@ -16,6 +16,7 @@ from coscope.graph.got.prompt_templates import (
     GOT_SOLVER_PROMPT,
     GOT_VERIFIER_PROMPT_TEMPLATES,
 )
+from coscope.prompts.registry import get_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -158,13 +159,6 @@ def build_verifier_prompt(
 # ---------------------------------------------------------------------------
 
 
-_INTENT_HEADER = (
-    "Step 2: Pre-retrieval reasoning. Reason silently about WHAT evidence you need\n"
-    "before issuing a retrieval query. Respond in English, under 50 words, as a\n"
-    "short dash-prefixed list of search targets. No preamble.\n"
-)
-
-
 def build_query_intent_prompt(
     *,
     role: str,
@@ -173,7 +167,7 @@ def build_query_intent_prompt(
     prior_conclusions: List[str],
     reasoning_path_type: ReasoningPathType,
 ) -> str:
-    base = _INTENT_HEADER
+    base = get_prompt("rollout/step2/header")
     if role == "planner":
         return base + f"Role: planner\nQuestion: {raw_item.get('question', '')}\nOutput: a short list of topical areas to retrieve."
     if role == "solver":
@@ -198,11 +192,7 @@ def build_scratch_prompt(
     prior_conclusions: List[str],
     reasoning_path_type: ReasoningPathType,
 ) -> str:
-    header = (
-        "Post-retrieval private reasoning. Think step-by-step before committing to a conclusion.\n"
-        "Respond in English, under 150 words, as a short numbered list of reasoning steps.\n"
-        "No markdown headings, no preamble.\n"
-    )
+    header = get_prompt("rollout/scratch/header")
     if role == "solver":
         hop = int(node.hop_index or 0)
         sub_q = _sub_question_for_hop(raw_item, hop, prior_conclusions)
