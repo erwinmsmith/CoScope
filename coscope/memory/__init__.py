@@ -14,6 +14,14 @@ from coscope.memory.store import (
 # CRUD operations
 from coscope.memory.crud import MemoryCRUD, MemoryFilter, MemoryQuery
 
+# Entry builders
+from coscope.memory.builders import (
+    PrivateBuilder,
+    RestrictedBuilder,
+    TaskSharedBuilder,
+    WorkspaceBuilder,
+)
+
 __all__ = [
     # Stores
     "InMemoryMemoryStore",
@@ -23,4 +31,9 @@ __all__ = [
     "MemoryCRUD",
     "MemoryFilter",
     "MemoryQuery",
+    # Builders
+    "PrivateBuilder",
+    "RestrictedBuilder",
+    "TaskSharedBuilder",
+    "WorkspaceBuilder",
 ]

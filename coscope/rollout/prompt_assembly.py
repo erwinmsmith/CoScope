@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from coscope.core.types import GoTNode, ReasoningPathType
-from coscope.graph.got.prompt_templates import (
+from coscope.prompts.graph.got import (
     GOT_PLANNER_PROMPT,
     GOT_SOLVER_PROMPT,
     GOT_VERIFIER_PROMPT_TEMPLATES,

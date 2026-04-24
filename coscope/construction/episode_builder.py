@@ -38,10 +38,10 @@ from coscope.core.types import (
 )
 from coscope.graph.got.graph_builder import GraphBuilder
 from coscope.graph.got.rho_calculator import RhoCalculator
-from coscope.memory.private_builder import PrivateBuilder
-from coscope.memory.restricted_builder import RestrictedBuilder
-from coscope.memory.task_shared_builder import TaskSharedBuilder
-from coscope.memory.workspace_builder import WorkspaceBuilder
+from coscope.memory.builders.private_builder import PrivateBuilder
+from coscope.memory.builders.restricted_builder import RestrictedBuilder
+from coscope.memory.builders.task_shared_builder import TaskSharedBuilder
+from coscope.memory.builders.workspace_builder import WorkspaceBuilder
 from coscope.evaluation.split.subset_assigner import SubsetAssigner, load_default_thresholds
 
 

@@ -142,45 +142,51 @@ def list_keys() -> Iterable[str]:
 
 
 def _bootstrap_builtin_prompts() -> None:
-    """Pull prompts from the legacy source-of-truth modules into the registry.
+    """Register all built-in prompts.
 
-    This function is idempotent and defensive: any import failure is logged
-    and skipped so the registry never blocks module import.
+    Imports directly from :mod:`coscope.prompts.graph` (canonical source) and
+    from inline constants for the rollout headers. Idempotent and defensive.
     """
-    # Graph prompts (GoT, CoT, ToT). Each graph module is the source of truth
-    # for its own template strings; we mirror them into the registry.
+    # Graph prompts — prompts/graph/ is the single source of truth.
     try:
-        from coscope.graph.got import prompt_templates as got_pt
+        from coscope.prompts.graph.got import (
+            GOT_PLANNER_PROMPT,
+            GOT_SOLVER_PROMPT,
+            GOT_VERIFIER_PROMPT_TEMPLATES,
+        )
 
-        register_prompt("graph/got/planner", got_pt.GOT_PLANNER_PROMPT)
-        register_prompt("graph/got/solver", got_pt.GOT_SOLVER_PROMPT)
-        for dataset, text in got_pt.GOT_VERIFIER_PROMPT_TEMPLATES.items():
+        register_prompt("graph/got/planner", GOT_PLANNER_PROMPT)
+        register_prompt("graph/got/solver", GOT_SOLVER_PROMPT)
+        for dataset, text in GOT_VERIFIER_PROMPT_TEMPLATES.items():
             register_prompt(f"graph/got/verifier:{dataset}", text)
     except Exception as exc:  # noqa: BLE001
         logger.debug("GoT prompt bootstrap skipped: %s", exc)
 
     try:
-        from coscope.graph.cot import prompt_templates as cot_pt
+        from coscope.prompts.graph.cot import (
+            COT_PLANNER_PROMPT,
+            COT_SOLVER_PROMPT,
+        )
 
-        for name in dir(cot_pt):
-            if name.startswith("COT_") and isinstance(getattr(cot_pt, name), str):
-                suffix = name[len("COT_"):].lower()
-                register_prompt(f"graph/cot/{suffix}", getattr(cot_pt, name))
+        register_prompt("graph/cot/planner_prompt", COT_PLANNER_PROMPT)
+        register_prompt("graph/cot/solver_prompt", COT_SOLVER_PROMPT)
     except Exception as exc:  # noqa: BLE001
         logger.debug("CoT prompt bootstrap skipped: %s", exc)
 
     try:
-        from coscope.graph.tot import prompt_templates as tot_pt
+        from coscope.prompts.graph.tot import (
+            TOT_PLANNER_PROMPT,
+            TOT_SOLVER_PROMPT,
+            TOT_EVALUATOR_PROMPT,
+        )
 
-        for name in dir(tot_pt):
-            if name.startswith("TOT_") and isinstance(getattr(tot_pt, name), str):
-                suffix = name[len("TOT_"):].lower()
-                register_prompt(f"graph/tot/{suffix}", getattr(tot_pt, name))
+        register_prompt("graph/tot/planner_prompt", TOT_PLANNER_PROMPT)
+        register_prompt("graph/tot/solver_prompt", TOT_SOLVER_PROMPT)
+        register_prompt("graph/tot/evaluator_prompt", TOT_EVALUATOR_PROMPT)
     except Exception as exc:  # noqa: BLE001
         logger.debug("ToT prompt bootstrap skipped: %s", exc)
 
-    # Rollout step-2 / scratch headers. These are short strings that drive
-    # the pre-retrieval reasoning and post-retrieval reflection, respectively.
+    # Rollout step-2 / scratch headers.
     register_prompt(
         "rollout/step2/header",
         (
