@@ -76,7 +76,7 @@ def evaluate_variants(
     denominator = independent_first_stage if independent_first_stage is not None else len(requests)
 
     for variant in variants:
-        coscope.pipeline.reset_stats()
+        coscope.data.pipeline.reset_stats()
         results = coscope.retrieve(list(requests), variant=variant)
         stats = dict(coscope.get_stats()["pipeline_stats"])
         report = evaluate_retrieval(

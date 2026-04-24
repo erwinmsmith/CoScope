@@ -509,3 +509,419 @@ Proposed：Scope-Overlap-Aware Collaborative Retrieval
 - fallback 触发率
 - 平均延迟
 - 对应任务的指标（acc、bleu等等）
+
+# 第14章 实验设计
+
+## 14.1 数据集
+
+### 14.1.1 数据集概览
+
+本文使用五个数据集，分为多跳问答和数学推理两类。所有数据集使用统一的 schema 和 agent 配置规则，memory store 结构、agent 分配方式、ground-truth 标注方式完全一致。
+
+| 数据集 | 类型 | 评测 split | episode 数 | 跳数/步数 |
+|---|---|---|---|---|
+| MuSiQue | 多跳问答 | dev | ~2400 | 2/3/4跳 |
+| 2WikiMultiHopQA | 多跳问答 | dev 前3000条 | ~3000 | 2跳（多类型） |
+| HotpotQA | 多跳问答 | dev distractor | ~7400 | 2跳 |
+| GSM8K | 数学推理 | test | ~1300 | 4–6步 |
+| MATH | 数学推理 | test（步数≥3） | ~2500 | 3–9步 |
+
+### 14.1.2 Episode 结构
+
+每条 episode（JSONL 一行）包含以下内容：
+
+**固定结构（来自数据集）：**
+- `question` / `answer`：题目和答案
+- `got_graph`：agent 拓扑结构，描述谁依赖谁
+- `agents`：每个 agent 的配置和 scope 权限声明
+- `retrieval_requests`：每个 agent 的检索请求，含实时生成的 query
+- `ground_truth`：每个 agent 应该检索到哪些 memory_id，用于评测打分
+- `rho` / `rho_subset`：scope overlap 值和子集标签（S1/S2/S3/S4）
+
+**Memory Store（系统运行时产出，写入后存入 JSONL）：**
+
+| 层 | slot | 内容 | 可见性 |
+|---|---|---|---|
+| workspace_semantic | — | 公共知识库（corpus 段落） | PUBLIC，所有 agent |
+| task_shared_plan | plan | Planner 的任务分解计划 | TEAM，所有 agent |
+| task_shared_artifact | conclusion | 每个 Solver 产出的结论 | TEAM，所有 agent |
+| agent_private_intent | query_intent | 每个 agent 的检索前推理意图 | OWNER，仅自己 |
+| agent_private | scratch | 每个 agent 的推理草稿 | OWNER，仅自己 |
+| restricted | audit_report | Verifier 评判记录（仅 S4） | RESTRICTED，仅 Verifier |
+
+**关键设计：**
+- workspace_semantic 扁平存储，所有 agent 共享，不按 hop/agent 分区
+- agent_private 的内容对其他 agent 完全不可见，Solver_1 的草稿 Solver_2 看不到
+- ρ 在 Step 6 写回 memory 时决定：写入 task_shared 越多则重叠越大，ρ 越高
+
+### 14.1.3 各数据集差异点
+
+| 数据集 | task_shared 写入方式 | 特殊说明 |
+|---|---|---|
+| MuSiQue | online（每轮实时写入） | 主力数据集，唯一覆盖 S1–S4 |
+| 2WikiMultiHopQA | online | comparison 类适合构造 S2 场景 |
+| HotpotQA | online | 候选池固定10条（2 gold + 8 distractor） |
+| GSM8K | oracle（步骤预写入） | gold 计算结论预写入 task_shared |
+| MATH | oracle | workspace 额外写入公式和定理 |
+
+---
+
+## 14.2 子集划分
+
+### 14.2.1 ρ 的定义与产生时机
+
+ρ 衡量不同 Solver 在运行时需要检索的内容重叠程度。**ρ 在 Step 6 写回 Memory Store 时产生**，不是事后计算的：
+
+```
+对每个 Solver_i：
+    A_i = {plan.memory_id}
+        ∪ {conclusion.memory_id | 产生者 ∈ ancestors_or_self(i)}
+
+ρ(episode) = mean_{i<j} |A_i ∩ A_j| / |A_i ∪ A_j|
+```
+
+排除范围：workspace_semantic（所有 solver 等价可见）、query_intent + scratch（各 solver 独有）。
+
+评测时直接读 JSONL 里的 `rho_subset` 字段，不需要重新计算。
+
+### 14.2.2 子集定义
+
+阈值：high = 0.6，low = 0.4。
+
+| 子集 | ρ 范围 | 含义 | 实测对应图类型 |
+|---|---|---|---|
+| S1 | ρ > 0.6 | 高重叠，协同检索收益最大 | LINEAR、POLICY_ISOLATED |
+| S2 | 0.4 < ρ ≤ 0.6 | 中等重叠 | FORK_MERGE |
+| S3 | ρ ≤ 0.4 | 低重叠，接近独立检索 | FORK、INDEPENDENT |
+| S4 | policy 冲突 | 安全性验证，与 S1/S2/S3 互斥 | 全量按3%–5%分层抽取 |
+
+实测 ρ 分布（MuSiQue dev）：
+
+| 图类型 | ρ 均值 | 子集 |
+|---|---|---|
+| FORK | 0.333 | S3 |
+| INDEPENDENT | 0.394 | S3 |
+| FORK_MERGE | 0.444 | S2 |
+| LINEAR 2-hop | 0.667 | S1 |
+| POLICY_ISOLATED | 0.667 | S1 |
+
+### 14.2.3 推理结构对 ρ 的影响
+
+GoT / CoT / ToT 三种推理结构**分别构造三套 episode JSONL**，各自独立计算 ρ，独立划分子集标签。
+
+| 结构 | agent_private 规模 | ρ 趋势 | S1 占比 |
+|---|---|---|---|
+| GoT（主实验） | 最大 | 最低 | 最低（~25%） |
+| ToT | 居中 | 居中 | 居中 |
+| CoT | 最小 | 最高 | 最高（~40%） |
+
+GoT 节点最多，各节点有独立的私有推理路径，写入 agent_private 的内容最多，写入 task_shared 的相对少，ρ 系统性偏低。CoT 线性链上每步结论全部写入 task_shared，ρ 最高。
+
+### 14.2.4 S4 构造
+
+从每个数据集全量 episode 中按 seed=42 分层随机抽取（S1/S2/S3 三档各占 1/3），抽取后从原子集中移除，与 S1/S2/S3 完全互斥。
+
+各数据集 restricted scope 内容：
+
+| 数据集 | restricted 内容 | 生成方式 |
+|---|---|---|
+| MuSiQue / 2WikiMultiHopQA / HotpotQA | supporting facts 句子级来源可信度标注 | 确定性规则 |
+| GSM8K / MATH | 解题步骤数值一致性校验记录 | 确定性规则 |
+
+S4 仅报告 False Merge Rate（FMR），不参与任务完成指标评测。
+
+---
+
+## 14.3 CoScope 检索机制
+
+### 14.3.1 每轮 t 的实时执行流程
+
+系统完全实时运行，每一轮 t 执行当前批次的 agent，全部 6 步均为实时：
+
+```
+Step 1：硬依赖注入
+  父节点的 conclusion 直接作为 context 喂给当前 agent prompt
+  （强制依赖，不经过检索）
+
+Step 2：检索前推理（★ 核心新增）
+  每个 agent 独立推理："我这一步需要查什么？"
+  → 产出 query_intent，写入 agent_private
+  Planner → 整个任务需要哪些大方向信息
+  Solver_k → 当前步骤需要哪些具体事实
+
+Step 3：生成 retrieval request
+  基于 query_intent 生成精准的检索请求
+  带 scope / policy / state
+
+Step 4：CoScope 协同检索（★ 核心验证对象）
+  检索来源 A：workspace_semantic（公共知识库）
+  检索来源 B：Memory Store 三层（其他 agent 已产出的内容）
+  pipeline：scope 分桶 → batch query matrix → shared rerank
+           → private fallback → C_i_final
+
+Step 5：LLM 推理产出（Qwen 32B）
+  输入：context（硬依赖）+ C_i_final（检索结果）
+  产出：scratch（私有草稿）+ conclusion（对外结论）
+
+Step 6：写回 Memory Store  ★ ρ 在此产生
+  scratch    → agent_private（仅自己可见）
+  conclusion → task_shared（所有 agent 可见）
+  audit_report → restricted（仅 Verifier，S4 场景）
+
+下一轮 agent 通过 CoScope 检索以上内容，循环直到出最终答案
+```
+
+### 14.3.2 Batch Query Matrix（核心机制）
+
+Step 4 的核心创新：将同一 scope bucket 内多个 agent 的 query 组织为矩阵，联合处理，而非逐个独立检索。
+
+**完整数据流：**
+
+```
+同一 bucket 内 n 个 agent 各自的 query 文本
+    ↓
+text-embedding-v3（通义千问）实时向量化
+    ↓
+q_i ∈ R^k，按列拼成 Q ∈ R^(k × n)
+    ↓
+Truncated SVD：Q = U Σ V^T，取前 r 个左奇异向量
+Z = U[:, 1:r]  ∈ R^(k × r)
+    ↓
+与 memory keys 做匹配：A = Z^T K^T  ∈ R^(n × m)
+    ↓
+按行 top-k → 共享候选池 C_shared
+    ↓
+agent-specific rerank
+    ↓
+private fallback（候选不足时补充私有检索）
+    ↓
+C_i_final（每个 agent 的最终候选集）
+```
+
+**SVD 的作用：**
+不训练任何参数，直接对当前 bucket 的 query matrix 做 Truncated SVD，提取这批 query 的主方向，用主方向联合检索 memory。每个 bucket 独立算一次，算完即用，无需存储。适用条件：bucket 内 agent 数 n ≥ 3，n < 3 时退化为 query 均值。
+
+**与独立检索的区别：**
+
+| | 独立检索（A1） | Batch Query Matrix（CoScope） |
+|---|---|---|
+| 处理方式 | 每个 query 单独检索 | 同 bucket 内 query 拼成矩阵联合处理 |
+| query 方向差异 | 丢失 | 保留 |
+| first-stage 次数 | n 次 | 1 次 |
+| 跨 agent 收益 | 无 | ρ 越高收益越大 |
+
+---
+
+## 14.4 对比方法
+
+### 14.4.1 内部消融（A1–A10）
+
+执行顺序：A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8（全部无需训练）。
+
+| 变体 | 描述 |
+|---|---|
+| A1 | 每个 agent 完全独立检索，无任何共享（下界基线） |
+| A2 | 强制合并所有请求，不做 scope/policy 校验，无重排无 fallback |
+| A3 | 仅按 scope 分桶，query 直接平均，无重排无 fallback |
+| A4 | scope 分桶 + 个体重排 + private fallback，无 query matrix |
+| A5 | scope 分桶 + batch query matrix + SVD + 重排 + fallback，无 block routing |
+| A6 | A5 + block routing |
+| A7 | 去掉 Step 2（直接用 raw question 做 query），其余与 A5 相同 |
+| A8 | 完整方法：全组件开启，含 Step 2 检索前推理 |
+| A9 | GoT 推理结构 + A8（主实验默认） |
+| A10 | CoT / ToT 推理结构 + A8（分别构造 JSONL，独立评测） |
+
+**消融轴对照：**
+
+| 对比 | 验证内容 |
+|---|---|
+| A1 vs A3 | scope 分桶的效率收益 |
+| A3 vs A4 | 个体 rerank + fallback 的质量收益 |
+| A4 vs A5 | batch query matrix + SVD 的收益（核心） |
+| A5 vs A6 | block routing 的效率与精度收益 |
+| A7 vs A8 | Step 2 检索前推理的收益 |
+| A2 on S4 | 无差别共享的安全风险（FMR） |
+| A9 vs A10 | 推理结构对 fallback 和任务完成的影响 |
+
+### 14.4.2 外部对比方法
+
+| 方法 | 类型 | 适用数据集 | 说明 |
+|---|---|---|---|
+| BM25 | 稀疏检索 | 全部五个 | 词频检索，无跨 agent 共享，检索下界 |
+| DPR | 密集检索 | 全部五个 | 双编码器，每个 agent 独立运行 |
+| ColBERT | 晚交互检索 | 全部五个 | 晚交互模型，每个 agent 独立运行 |
+| MemWalker | 记忆管理 | MuSiQue、HotpotQA | 树形记忆结构导航式检索 |
+| MemMA | 记忆管理 | MuSiQue、HotpotQA | 多 agent 记忆管理，代码开源 |
+| HippoRAG | RAG | 全部多跳问答 | 知识图谱 RAG，不适用于数学推理类 |
+| Iter-RetGen | 迭代检索 | 全部五个 | 迭代式检索生成 |
+
+注：GSM8K/MATH 仅运行 BM25、DPR、ColBERT、Iter-RetGen。
+
+---
+
+## 14.5 评测方式
+
+### 14.5.1 两种评测模式
+
+**模式 B（主实验）：算法评测**
+
+```
+读 JSONL：
+  retrieval_requests（query + scope + policy）
+  memory_entries（workspace + 已有 artifact）
+      ↓
+Step 4 CoScope 实时跑（唯一变量）
+      ↓
+C_i_pred vs ground_truth → Recall@k / FMR
+      ↓
+按 rho_subset 分组报告 S1/S2/S3/S4
+```
+
+Step 4 是唯一变量，排除 LLM 随机性干扰，结果可复现。ground_truth 直接用 JSONL 里的标注，memory_id 精确对应。
+
+**模式 A（附录）：端到端评测**
+
+```
+Step 1–6 全部实时跑，多轮迭代
+      ↓
+最终答案 vs gold answer → EM / F1
+```
+
+ground_truth 只用 workspace_semantic 层（corpus 级，对所有 run 都稳定）。
+
+### 14.5.2 结果汇报
+
+五个数据集各自独立汇报，主表格式（以 MuSiQue 为例）：
+
+| 方法 | S1 EM/F1 | S2 EM/F1 | S3 EM/F1 | S4 FMR | Recall@10 | Evidence Hit Rate |
+|---|---|---|---|---|---|---|
+| A1 | | | | — | | |
+| A2 | | | | ~1.0 | | |
+| A3–A6 | | | | — | | |
+| A8 | | | | ~0.0 | | |
+| BM25 / DPR / … | | | | — | | |
+
+S4 列仅报告 FMR，不报告任务完成指标。
+
+**跨数据集 S4 FMR 汇总（附表）：**
+
+| 数据集 | A2 FMR（预期~1.0） | A8 FMR（预期~0.0） |
+|---|---|---|
+| MuSiQue | | |
+| 2WikiMultiHopQA | | |
+| HotpotQA | | |
+| GSM8K | | |
+| MATH | | |
+
+---
+
+## 14.6 评测指标
+
+**任务完成质量**：EM / F1（多跳问答类）、Accuracy（数学推理类）
+
+**检索质量**：Recall@k、MRR@k、Evidence Hit Rate、Answer Support Rate
+
+**效率**：Shared-first-stage Savings、Fallback Necessity Rate、平均端到端延迟
+
+**分桶安全性**：False Merge Rate（FMR，S4 专用）、Shareability Precision / Recall
+
+---
+
+## 14.7 消融分析
+
+### 14.7.1 各组件边际贡献
+
+每个变体仅控制一个变量，逐步开启组件，量化各模块的边际贡献：
+
+- **Scope 分桶（A1 vs A3）**：效率收益为主，关注 first-stage savings 和延迟变化，预期质量提升有限
+- **个体 rerank + fallback（A3 vs A4）**：关注 Recall@k 和 Evidence Hit Rate 提升，预期在 S2 部分重叠子集最显著
+- **Batch query matrix + SVD（A4 vs A5）**：核心机制收益，保留 query 方向差异的价值，预期 Recall@k 提升最显著，在 S1 高重叠子集收益最大
+- **Block routing（A5 vs A6）**：关注 S1 高重叠场景下 memory slice 规模最大时的延迟收益
+- **Step 2 检索前推理（A7 vs A8）**：query 更精准，query matrix 方向差异更真实，预期 Recall@k 提升，在 S2 效果最显著
+- **Policy 安全性（A2 on S4）**：FMR 接近 1，证明无差别共享的安全风险；A8 on S4 FMR 接近 0，证明分权隔离的有效性
+
+### 14.7.2 SVD 有效秩 r 的敏感性分析
+
+Truncated SVD 的截断秩 r 是唯一超参数，在 r ∈ {8, 16, 32, 64} 上做网格搜索，分析对 Recall@10 的影响曲线：
+
+- r 过小：共享子空间表达能力不足，多 agent query 方向被过度压缩，Recall@10 下降
+- r 过大：SVD 退化为不截断，与 query 均值效果接近，batch query matrix 的收益消失
+- 预期最优 r 在 16–32 之间，在 MuSiQue dev 上确定后固定用于其余数据集
+
+此外分析 bucket 内 agent 数 n 对 SVD 有效性的影响：n < 3 时 query 方向不足，SVD 主方向不稳定，退化接近 A4（query 均值）；n ≥ 3 时开始体现多方向结构收益。
+
+### 14.7.3 Scope 重叠程度的影响
+
+在 S1/S2/S3 三档分别报告 A8 vs A1 的提升幅度，绘制提升幅度随 ρ 变化的折线图。
+
+预期正相关：S1 提升最大，S3 接近 0，证明协同检索的自适应性——在不该共享时不强行共享，ρ 低时自动退化接近独立检索。
+
+### 14.7.4 Agent 数量的影响
+
+将 bucket 内 agent 数 n 从 2 变化至 6，分析对以下指标的影响：
+
+- **Recall@10**：预期 n=3–4 时最优，n 过大时 block routing 的局部路由价值更突出
+- **平均端到端延迟**：n 增大时 query matrix 构造和 SVD 计算开销增加
+- **SVD 有效性**：n < 3 时退化，n ≥ 3 时开始稳定
+
+### 14.7.5 跨数据集泛化性分析
+
+SVD 是无监督方法，不依赖任何训练数据，天然具备跨数据集泛化性。在附表中报告：
+
+- A5（batch query matrix + SVD）在五个数据集上的 Recall@10 提升方向是否一致
+- 若在 MuSiQue 上确定的最优 r，在 2WikiMultiHopQA、HotpotQA、GSM8K、MATH 上的表现
+- 两类数据集（多跳问答 vs 数学推理）的提升幅度差异及原因分析
+
+### 14.7.6 推理结构的影响（A9 vs A10）
+
+GoT / CoT / ToT 三套 JSONL 分别构造，在各自子集划分下独立评测，验证推理结构对检索和任务完成指标的影响：
+
+| 指标 | GoT 预期 | ToT 预期 | CoT 预期 | 原因 |
+|---|---|---|---|---|
+| Fallback Necessity Rate | 最高 | 居中 | 最低 | GoT 节点多，共享候选难以全覆盖 |
+| Evidence Hit Rate | 最高 | 居中 | 较低 | 节点级 fallback 弥补漏洞更充分 |
+| S2 任务完成 | 最优 | 居中 | 较差 | 部分重叠场景节点级 fallback 更精准 |
+| 平均端到端延迟 | 最高 | 居中 | 最低 | 图遍历和多节点 fallback 开销 |
+
+附表中报告三种结构下 S1/S2/S3 的实际 ρ 分布，验证 GoT ρ 系统性低于 CoT 的预期，并分析 ρ 偏移对各结构任务完成指标的影响。
+
+---
+
+## 14.8 效率分析
+
+效率结果按 S1/S2/S3 分层报告：
+
+| 指标 | A1 | A5 | A8 |
+|---|---|---|---|
+| Shared-first-stage Savings | 0% | — | — |
+| 平均端到端延迟（ms） | — | — | — |
+| Fallback Necessity Rate | — | — | — |
+
+---
+
+## 14.9 数据验收标准
+
+### 14.9.1 Episode 级别验收
+
+| 检查项 | 规则 | 失败处理 |
+|---|---|---|
+| workspace_semantic 非空 | item 数 ≥ 1 | 过滤 |
+| restricted 仅 Verifier 可访问 | visibility = ["verifier"] | 过滤 |
+| memory_id 全局唯一 | 同一 episode 内无重复 | 报错去重 |
+| agent_private 内容各自独立 | Solver_i 的 private scope 不在 Solver_j 的 allowed_scopes 里 | 报错 |
+| ρ ∈ [0, 1] | 0 ≤ ρ ≤ 1 | 重新计算 |
+| 子集标签与 ρ 一致 | S1: ρ>0.6；S2: 0.4<ρ≤0.6；S3: ρ≤0.4 | 重新分配 |
+| ground_truth 非空 | 每个 agent 至少一条 | 过滤 |
+| ground_truth 的 memory_id 在 memory_entries 中存在 | 逐条检查 | 报错 |
+
+### 14.9.2 数据集级别验收
+
+| 检查项 | 预期 |
+|---|---|
+| S1 占比 | MuSiQue ~30%–40%；GSM8K/MATH ~60%–80% |
+| S3 占比 | 各数据集均 > 5% |
+| S4 内部三档均衡 | S1/S2/S3 各占 S4 约 1/3（±5%） |
+| GoT S1 占比 < CoT S1 占比 | 同数据集内方向性验证 |
+| 三套 JSONL 题目集合完全一致 | 固定题目，只改推理结构 |
+| S4 与 S1/S2/S3 完全互斥 | 同一 episode_id 不出现在多个子集 |
+| S4 中 Verifier 均持有 restricted item | 100% |

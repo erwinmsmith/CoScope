@@ -1,0 +1,19 @@
+# ρ thresholds for S1 / S2 / S3 subset assignment (v3, artifact-trace rho).
+#
+# Empirical distribution on MuSiQue dev (3 items/graph, template rollout):
+#   - FORK              ρ ≈ 0.333
+#   - INDEPENDENT       ρ ≈ 0.394
+#   - FORK_MERGE        ρ ≈ 0.444
+#   - LINEAR  (2-hop)   ρ ≈ 0.667
+#   - POLICY_ISOLATED   ρ ≈ 0.667
+#
+# Rule:
+#   S1: ρ >  s1_threshold           (LINEAR, POLICY_ISOLATED)
+#   S2: s3_upper  <  ρ  ≤  s1_threshold  (FORK_MERGE)
+#   S3: ρ ≤  s3_upper               (FORK, INDEPENDENT)
+#
+# (s2_lower is a readability alias for s3_upper; both must be equal.)
+
+s1_threshold: 0.6
+s2_lower: 0.4
+s3_upper: 0.4
