@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Union
 
 from coscope.core.types import Episode, SubsetLabel
-from coscope.utils.split.subset_assigner import (
+from coscope.evaluation.split.subset_assigner import (
     SubsetThresholds,
     load_default_thresholds,
 )

@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from coscope.utils.loaders.base_loader import BaseLoader
+from coscope.io.loaders.base_loader import BaseLoader
 
 
 class MathLoader(BaseLoader):

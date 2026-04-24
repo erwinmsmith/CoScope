@@ -17,9 +17,9 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 from coscope.core.types import Episode, GraphType, SubsetLabel
-from coscope.utils.loaders import get_loader
-from coscope.utils.output.serializer import Serializer
-from coscope.utils.output.stats_reporter import StatsReporter, SubsetCoverageError
+from coscope.io.loaders import get_loader
+from coscope.io.serializer import Serializer
+from coscope.io.stats_reporter import StatsReporter, SubsetCoverageError
 from coscope.construction.episode_builder import EpisodeBuilder
 
 
@@ -247,7 +247,7 @@ def _build_one(
     seed: int,
 ) -> Optional[Dict[str, Any]]:
     """Worker entry point used in the ProcessPoolExecutor path."""
-    from coscope.utils.output.serializer import Serializer as _Ser
+    from coscope.io.serializer import Serializer as _Ser
     from coscope.construction.episode_builder import EpisodeBuilder as _Builder
 
     builder = _Builder()

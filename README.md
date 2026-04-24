@@ -20,23 +20,69 @@ CoScope is a framework for efficient collaborative memory retrieval in multi-age
 
 ```
 coscope/
+├── core/                # Types, interfaces, scope IDs, artifact slots
 ├── config/              # Configuration management (YAML + env)
-├── core/                # Core types and interfaces
-├── retrieval/           # Retrieval pipeline modules
-│   ├── encoder/        # Request normalization
-│   ├── router/        # Scope-based bucketing
-│   ├── matrix/         # Query matrix construction
-│   ├── projection/     # Shared subspace projection
-│   ├── retriever/     # Candidate retrieval
-│   ├── reranker/       # Agent-specific reranking
-│   ├── fallback/       # Private scope fallback
-│   └── fusion/         # Evidence fusion
-├── memory/             # Memory storage and CRUD
-│   └── crud/          # High-level memory operations
-├── prompts/           # Prompt template management
-├── agents/            # Agent integrations (LangChain/LangGraph)
-└── examples/          # Usage examples
+│
+├── engine/              # CoScope facade — entry point for all retrieval
+│
+├── retrieval/           # Retrieval pipeline (performance-tuning surface)
+│   ├── encoder/         # Request normalisation
+│   ├── router/          # Scope-based bucketing
+│   ├── matrix/          # Query matrix construction
+│   ├── projection/      # Shared subspace projection (SVD)
+│   ├── retriever/       # Candidate retrieval
+│   ├── reranker/        # Agent-specific reranking
+│   ├── fallback/        # Private-scope fallback
+│   └── fusion/          # Evidence fusion
+│
+├── memory/              # Memory storage and CRUD
+│   ├── store.py         # In-memory backend (pluggable via protocol)
+│   ├── *_builder.py     # Workspace / task-shared / private builders
+│   └── crud/
+│       ├── manager.py   # High-level CRUD operations
+│       ├── types.py
+│       └── auth/        # Access control, policy validator, S4 FMR check
+│
+├── llm/                 # LLM client layer (DB/service-swappable)
+│   ├── base.py          # LLMClient protocol + LLMResponse (re-export)
+│   ├── dashscope.py     # DashScopeClient (Qwen API)
+│   └── template.py      # TemplateLLMClient (deterministic, for testing)
+│
+├── io/                  # Data-access and serialisation layer
+│   ├── serializer.py    # Episode <-> JSONL round-trip
+│   ├── stats_reporter.py
+│   ├── validator.py
+│   └── loaders/         # Raw-dataset loaders (MuSiQue, HotpotQA, ...)
+│
+├── prompts/             # Prompt management
+│   ├── registry.py      # Central DB-pluggable registry (set_backend)
+│   ├── manager.py       # Template manager (JSON/YAML file loading)
+│   └── templates.py     # Role prompt templates
+│
+├── graph/               # GoT / CoT / ToT graph builders + prompt strings
+├── rollout/             # Offline LLM rollout engine; artifact traces
+├── construction/        # Episode construction from raw datasets
+│                        #   - io/loaders reads raw data
+│                        #   - construction/ builds Episodes from it
+├── evaluation/
+│   ├── metrics.py       # Recall, precision, FMR, rho
+│   ├── runner.py        # In-process variant runner
+│   ├── jsonl_runner.py  # Batch JSONL evaluation
+│   └── split/           # Subset assignment (S1-S4) and split management
+│
+├── agents/              # Agent builders (planner / solver / verifier)
+├── scripts/             # Thin CLI scripts — arg parsing + orchestration only
+└── examples/            # Usage examples
 ```
+
+> **DB integration hooks** — six stable extension points for wiring the
+> external database product:
+> `memory.store` (backend protocol) · `memory.crud.auth` (permission layer) ·
+> `prompts.registry.set_backend` · `embedding.*` (adapter) ·
+> `llm.LLMClient` (model service) · `retrieval.retriever` (vector DB)
+
+See `ARCHITECTURE.md` for the full migration history and the ordered
+next-action plan.
 
 ## Installation
 

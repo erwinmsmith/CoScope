@@ -18,11 +18,11 @@ from typing import List
 
 from coscope.core.types import GraphType, ReasoningPathType
 from coscope.graph.got.graph_builder import GraphBuilder
-from coscope.utils.loaders import get_loader
+from coscope.io.loaders import get_loader
 from coscope.rollout import ArtifactRolloutEngine
 from coscope.rollout.rho_v3 import compute_rho
 from coscope.rollout.rollout_engine import RolloutConfig
-from coscope.rollout.template_llm_client import TemplateLLMClient
+from coscope.llm.template import TemplateLLMClient
 from coscope.rollout.trace_validator import validate_trace
 
 

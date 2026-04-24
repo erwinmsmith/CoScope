@@ -146,12 +146,12 @@ coscope/
 | ---- | ---- | -- | ---- |
 | Auth | `coscope/auth/` | `coscope/memory/crud/auth/` | **DONE** (shim kept) |
 | Prompts central registry | - | `coscope/prompts/registry.py` | **DONE** |
-| LLM clients | `rollout/{dashscope,template,llm}_client.py` | `coscope/llm/{dashscope,template,base}.py` | low (3 import sites) |
-| Dataset loaders | `utils/loaders/` | `io/loaders/` | medium (dataset pipeline) |
-| JSONL serializer | `utils/output/` | `io/` | medium (many call sites) |
-| Subset split | `utils/split/` | `evaluation/split/` | low (2 call sites) |
-| Engine facade | `engine.py` | `engine/__init__.py` | low |
-| Memory builders | `memory/*_builder.py` | `memory/builders/` | low |
+| LLM clients | `rollout/{dashscope,template,llm}_client.py` | `coscope/llm/{dashscope,template,base}.py` | **DONE** (shims kept in rollout/) |
+| Dataset loaders | `utils/loaders/` | `io/loaders/` | **DONE** |
+| JSONL serializer | `utils/output/` | `io/` | **DONE** |
+| Subset split | `utils/split/` | `evaluation/split/` | **DONE** |
+| Engine facade | `engine.py` | `engine/__init__.py` | **DONE** |
+| Memory builders | `memory/*_builder.py` | `memory/builders/` | low (cosmetic; deferred) |
 
 Each move keeps a backward-compatibility shim at the old path for one release
 cycle, then the shim is removed.
@@ -178,16 +178,37 @@ layers above.
 
 ---
 
-## 4. Next Actions (ordered)
+## 4. Design Principles (added after review)
 
-1. **LLM extraction** (`rollout/ -> llm/`) - lowest risk, highest leverage;
-   unlocks the DB/model-service swap and removes rollout's incidental
-   ownership of LLM clients.
-2. **IO layer** (`utils/{loaders,output} -> io/`) - makes the serialization
-   boundary explicit.
-3. **Evaluation split move** (`utils/split/ -> evaluation/split/`) - trivial.
-4. **Engine package** (`engine.py -> engine/`) - cosmetic, batch with 1-3.
-5. **README rewrite** to match the final target layout once 1-4 land.
+Two additional constraints emerging from user feedback:
 
-Until 1-4 are done, keep this file as the authoritative architecture
-description and treat README's architecture section as aspirational.
+**construction/ vs io/ boundary**
+- `io/loaders/` is responsible for reading raw third-party formats and
+  converting them to CoScope's internal raw-item dict (purely I/O).
+- `construction/` builds `Episode` objects from those raw-item dicts,
+  creating agents, memory entries, retrieval requests and subset tags.
+  It is domain logic, not I/O. The layering is: **raw file → io/loaders
+  → dict → construction/ → Episode**.
+
+**Scripts must be thin**
+- `scripts/` contains only argument parsing and top-level orchestration
+  calls. No business logic. If a script needs an LLM call, it imports
+  from `coscope.llm`, not from `rollout/`. If it needs serialisation, it
+  imports from `coscope.io`. This was the root cause of the original
+  cross-layer import (`scripts/generate_query_intent.py` importing from
+  `rollout.dashscope_client` directly) — now fixed.
+
+## 5. Next Actions (ordered)
+
+1. ~~LLM extraction~~ **DONE**
+2. ~~IO layer~~ **DONE**
+3. ~~Evaluation split move~~ **DONE**
+4. ~~Engine package~~ **DONE**
+5. ~~README rewrite~~ **DONE**
+6. **Memory builders grouping** — `memory/*_builder.py` → `memory/builders/`
+   (cosmetic; deferred until a natural refactor moment).
+7. **Prompt source consolidation** — move raw template strings from
+   `graph/*/prompt_templates.py` into `prompts/` as the single source;
+   keep the graph modules as thin importers. The registry already mirrors
+   them; this closes the source-of-truth gap.
+8. **utils/ removal** — once `utils/` shell is confirmed unused, delete it.

@@ -42,7 +42,7 @@ from coscope.memory.private_builder import PrivateBuilder
 from coscope.memory.restricted_builder import RestrictedBuilder
 from coscope.memory.task_shared_builder import TaskSharedBuilder
 from coscope.memory.workspace_builder import WorkspaceBuilder
-from coscope.utils.split.subset_assigner import SubsetAssigner, load_default_thresholds
+from coscope.evaluation.split.subset_assigner import SubsetAssigner, load_default_thresholds
 
 
 logger = logging.getLogger(__name__)

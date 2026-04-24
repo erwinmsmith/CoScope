@@ -56,7 +56,7 @@ from coscope.evaluation.runner import (
     VariantRun,
     evaluate_variants,
 )
-from coscope.utils.output.serializer import Serializer as JSONLSerializer
+from coscope.io.serializer import Serializer as JSONLSerializer
 
 
 # ---------------------------------------------------------------------------

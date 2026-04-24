@@ -56,10 +56,10 @@ logger = logging.getLogger(__name__)
 
 def _build_llm(name: str, model: str):
     if name == "template":
-        from coscope.rollout.template_llm_client import TemplateLLMClient
+        from coscope.llm.template import TemplateLLMClient
         return TemplateLLMClient()
     if name == "dashscope":
-        from coscope.rollout.dashscope_client import DashScopeClient
+        from coscope.llm.dashscope import DashScopeClient
         return DashScopeClient(model=model)
     raise ValueError(f"Unknown --llm backend: {name}")
 
@@ -142,9 +142,9 @@ def run_build(args) -> int:
     from coscope.core.types import GraphType
     from coscope.rollout import ArtifactRolloutEngine
     from coscope.rollout.rollout_engine import RolloutConfig
-    from coscope.utils.loaders import get_loader
-    from coscope.utils.output import Serializer
-    from coscope.utils.split import SubsetAssigner, load_default_thresholds
+    from coscope.io.loaders import get_loader
+    from coscope.io import Serializer
+    from coscope.evaluation.split import SubsetAssigner, load_default_thresholds
 
     llm = _build_llm(args.llm, args.llm_model)
     embedder = _build_embedder(args.embedder, args.embedder_model, args.embedder_dim)

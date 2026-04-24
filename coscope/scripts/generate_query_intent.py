@@ -38,8 +38,8 @@ from coscope.core.types import (
 )
 from coscope.rollout import prompt_assembly
 from coscope.rollout import fallback_synth
-from coscope.utils.loaders import get_loader
-from coscope.utils.output.serializer import Serializer
+from coscope.io.loaders import get_loader
+from coscope.io.serializer import Serializer
 
 
 logger = logging.getLogger(__name__)
@@ -54,11 +54,11 @@ def _make_llm(kind: str, model: Optional[str]) -> Any:
     """Instantiate the selected LLM client. Supported: dashscope, template."""
     kind = (kind or "template").lower()
     if kind == "dashscope":
-        from coscope.rollout.dashscope_client import DashScopeClient
+        from coscope.llm.dashscope import DashScopeClient
 
         return DashScopeClient(model=model or "qwen-plus")
     if kind == "template":
-        from coscope.rollout.template_llm_client import TemplateLLMClient
+        from coscope.llm.template import TemplateLLMClient
 
         return TemplateLLMClient()
     raise ValueError(f"Unsupported --llm kind: {kind}")

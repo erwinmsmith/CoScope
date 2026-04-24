@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import argparse
 
-from coscope.utils.loaders import get_loader
-from coscope.utils.split.split_manager import SplitManager
+from coscope.io.loaders import get_loader
+from coscope.evaluation.split.split_manager import SplitManager
 
 
 def main() -> None:

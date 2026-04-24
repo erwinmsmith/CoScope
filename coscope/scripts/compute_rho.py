@@ -15,7 +15,7 @@ import argparse
 from pathlib import Path
 
 from coscope.graph.got.rho_calculator import RhoCalculator
-from coscope.utils.output.serializer import Serializer
+from coscope.io.serializer import Serializer
 
 
 def main() -> None:

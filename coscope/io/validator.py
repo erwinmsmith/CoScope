@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Set
 
 from coscope.core.types import Episode, SubsetLabel
-from coscope.utils.split.subset_assigner import (
+from coscope.evaluation.split.subset_assigner import (
     SubsetThresholds,
     load_default_thresholds,
 )

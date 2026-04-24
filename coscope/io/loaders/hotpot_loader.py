@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from coscope.utils.loaders.base_loader import BaseLoader
+from coscope.io.loaders.base_loader import BaseLoader
 
 
 class HotpotLoader(BaseLoader):

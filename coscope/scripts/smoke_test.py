@@ -42,7 +42,7 @@ _install_retrieval_pipeline_stub()
 # Deferred imports (after the stub).
 from coscope import build_episode            # noqa: E402
 from coscope.core.types import GraphType     # noqa: E402
-from coscope.utils.output.serializer import Serializer  # noqa: E402
+from coscope.io.serializer import Serializer  # noqa: E402
 
 
 def _make_raw_item() -> dict:

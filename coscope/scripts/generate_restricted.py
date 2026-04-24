@@ -33,7 +33,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 
-from coscope.utils.loaders import get_loader
+from coscope.io.loaders import get_loader
 
 
 def _qa_entries(raw: Dict[str, Any]) -> List[Dict[str, Any]]:

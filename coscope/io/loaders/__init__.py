@@ -1,11 +1,11 @@
 """Dataset loaders — implement AbstractLoader."""
 
-from coscope.utils.loaders.base_loader import BaseLoader
-from coscope.utils.loaders.gsm8k_loader import GSM8KLoader
-from coscope.utils.loaders.hotpot_loader import HotpotLoader
-from coscope.utils.loaders.math_loader import MathLoader
-from coscope.utils.loaders.musique_loader import MusiqueLoader
-from coscope.utils.loaders.wiki_loader import WikiLoader
+from coscope.io.loaders.base_loader import BaseLoader
+from coscope.io.loaders.gsm8k_loader import GSM8KLoader
+from coscope.io.loaders.hotpot_loader import HotpotLoader
+from coscope.io.loaders.math_loader import MathLoader
+from coscope.io.loaders.musique_loader import MusiqueLoader
+from coscope.io.loaders.wiki_loader import WikiLoader
 
 
 _REGISTRY = {

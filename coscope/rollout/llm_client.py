@@ -1,2 +1,2 @@
-"""Re-export shim — canonical definitions moved to coscope.core.interfaces."""
-from coscope.core.interfaces import LLMClient, LLMResponse  # noqa: F401
+"""Backward-compat shim. Import from :mod:`coscope.llm` instead."""
+from coscope.llm import LLMClient, LLMResponse  # noqa: F401

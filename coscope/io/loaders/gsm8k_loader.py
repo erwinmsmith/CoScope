@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
-from coscope.utils.loaders.base_loader import BaseLoader
+from coscope.io.loaders.base_loader import BaseLoader
 
 
 class GSM8KLoader(BaseLoader):
