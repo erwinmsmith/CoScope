@@ -274,9 +274,10 @@ class RetrievalPipeline:
         query_embedding = np.mean(np.vstack(embeddings), axis=0)
         query_embedding = self._l2_normalize(query_embedding)
 
+        accessible = self._bucket_accessible_scopes(bucket)
         candidates = self.memory_store.search(
             query_embedding=query_embedding,
-            scope_filter=bucket.shared_scopes or None,
+            scope_filter=accessible or None,
             memory_type_filter=bucket.memory_types or None,
             policy_filter=bucket.merged_policy,
             top_k=self.config.shared_top_k,
@@ -491,11 +492,42 @@ class RetrievalPipeline:
 
         return FallbackResult(triggered=False, reason=reason)
 
+    def _bucket_accessible_scopes(self, bucket: RetrievalBucket) -> List[str]:
+        """
+        Scopes the shared pool for this bucket may read.
+
+        Routers build buckets around ``shared_scopes = [primary_scope]`` --
+        typically a per-task ``task/.../shared`` scope. That alone excludes
+        the workspace / corpus that every agent in the bucket is already
+        cleared to read, so the shared pool shrinks to a handful of
+        task-shared entries and rerank / fallback become no-ops for A3/A4.
+        Here we additionally union in the **intersection** of all bucket
+        requests' ``workspace_scopes``: that set is, by construction, shared
+        by every agent in the bucket and safe to pool into shared retrieval.
+        """
+        scopes = list(bucket.shared_scopes)
+        if bucket.requests:
+            workspace_sets = [set(r.scope.workspace_scopes) for r in bucket.requests]
+            if workspace_sets:
+                shared_ws = set.intersection(*workspace_sets)
+                for ws in sorted(shared_ws):
+                    if ws not in scopes:
+                        scopes.append(ws)
+        return scopes
+
     def _bucket_scope_spec(self, bucket: RetrievalBucket):
         from coscope.core.types import ScopeSpec
 
         shared_scopes = list(bucket.shared_scopes)
-        return ScopeSpec(shared_scopes=shared_scopes)
+        workspace_scopes: List[str] = []
+        if bucket.requests:
+            ws_sets = [set(r.scope.workspace_scopes) for r in bucket.requests]
+            if ws_sets:
+                workspace_scopes = sorted(set.intersection(*ws_sets))
+        return ScopeSpec(
+            shared_scopes=shared_scopes,
+            workspace_scopes=workspace_scopes,
+        )
 
     def _route_scope_only(self, requests: List[RetrievalRequest]):
         from collections import defaultdict
