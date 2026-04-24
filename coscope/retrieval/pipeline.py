@@ -127,6 +127,14 @@ class RetrievalPipeline:
             self._stats["independent_requests"] += len(requests)
             return self._order_results(requests, results, started)
 
+        if variant == "a2":
+            # Force-merge: all requests into a single shared pool, no scope /
+            # policy filtering, no rerank, no fallback. Intentionally unsafe;
+            # used as the §14.4.1 upper bound on FMR for S4 evaluation.
+            results = self._retrieve_force_merge(requests)
+            self._stats["shareable_buckets"] += 1
+            return self._order_results(requests, results, started)
+
         routing = (
             self._route_scope_only(requests)
             if variant in {"a3", "a4"}
@@ -355,6 +363,61 @@ class RetrievalPipeline:
             },
         )
 
+    def _retrieve_force_merge(
+        self,
+        requests: List[RetrievalRequest],
+    ) -> Dict[str, RetrievalResult]:
+        """
+        A2 variant: force all requests into a single shared pool with no
+        scope / policy filtering, mean-pooled query, no rerank, no fallback.
+
+        This is the deliberately permissive baseline used in §14.4.1. Every
+        request receives the same top-k list, sampled from the global memory
+        pool. The variant exists to establish the upper bound of False Merge
+        Rate on S4: if the system ignored scope/policy, verifier-only content
+        would leak into non-verifier results. It is not a recommended mode.
+        """
+        embeddings = [self.embedding_provider.embed_query(r.query) for r in requests]
+        query_embedding = self._l2_normalize(np.mean(np.vstack(embeddings), axis=0))
+
+        candidates = self.memory_store.search(
+            query_embedding=query_embedding,
+            scope_filter=None,
+            memory_type_filter=None,
+            policy_filter=None,
+            top_k=self.config.shared_top_k,
+        )
+        self._stats["first_stage_retrievals"] += 1
+        top_k = self.config.rerank_top_k
+
+        results: Dict[str, RetrievalResult] = {}
+        for request in requests:
+            shared = [
+                RetrievedCandidate(
+                    memory=candidate.memory,
+                    score=candidate.score,
+                    rank=rank,
+                    source="a2_force_merge",
+                    agent_id=request.agent_id,
+                )
+                for rank, candidate in enumerate(candidates[:top_k], start=1)
+            ]
+            results[request.request_id] = RetrievalResult(
+                request_id=request.request_id,
+                agent_id=request.agent_id,
+                role=request.role,
+                candidates=list(shared),
+                shared_candidates=list(shared),
+                private_candidates=[],
+                fallback_triggered=False,
+                metadata={
+                    "mode": "a2_force_merge",
+                    "pool_size": len(candidates),
+                    "merged_agents": len(requests),
+                },
+            )
+        return results
+
     def _personalize(
         self,
         request: RetrievalRequest,
@@ -530,6 +593,8 @@ class RetrievalPipeline:
         aliases = {
             "independent": "a1",
             "per_agent_independent": "a1",
+            "force_merge": "a2",
+            "naive_sharing": "a2",
             "scope_only": "a3",
             "scope_mean": "a3",
             "shared_mean": "a4",

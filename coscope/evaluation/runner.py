@@ -16,7 +16,7 @@ from coscope.evaluation.metrics import EvaluationReport, GoldMap, ResultPredicat
 from coscope.evaluation.metrics import evaluate_retrieval
 
 
-DEFAULT_VARIANTS = ("a1", "a3", "a4", "a5")
+DEFAULT_VARIANTS = ("a1", "a2", "a3", "a4", "a5")
 
 
 @dataclass
@@ -76,7 +76,7 @@ def evaluate_variants(
     denominator = independent_first_stage if independent_first_stage is not None else len(requests)
 
     for variant in variants:
-        coscope.data.pipeline.reset_stats()
+        coscope.pipeline.reset_stats()
         results = coscope.retrieve(list(requests), variant=variant)
         stats = dict(coscope.get_stats()["pipeline_stats"])
         report = evaluate_retrieval(

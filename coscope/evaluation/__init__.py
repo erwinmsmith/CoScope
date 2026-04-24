@@ -22,6 +22,14 @@ from coscope.evaluation.synthetic import (
     format_synthetic_case_tables,
     format_synthetic_table,
 )
+from coscope.evaluation.jsonl_runner import (
+    EpisodeRun,
+    StratifiedCell,
+    StratifiedReport,
+    evaluate_jsonl,
+    format_stratified_table,
+    load_episodes,
+)
 
 __all__ = [
     "EvaluationReport",
@@ -40,4 +48,10 @@ __all__ = [
     "evaluate_synthetic_suite",
     "format_synthetic_case_tables",
     "format_synthetic_table",
+    "EpisodeRun",
+    "StratifiedCell",
+    "StratifiedReport",
+    "evaluate_jsonl",
+    "format_stratified_table",
+    "load_episodes",
 ]
