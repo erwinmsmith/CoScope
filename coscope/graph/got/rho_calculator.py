@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Union
 
@@ -80,11 +81,22 @@ class RhoCalculator:
             # Single Solver: rho is trivially 1 (only one set). Return 1.0
             # if the set is non-empty to flag the degenerate graph.
             return 1.0 if accessible_sets[0] else 0.0
-        intersection = set.intersection(*accessible_sets)
-        union = set.union(*accessible_sets)
-        if not union:
+
+        # Pairwise mean IoU (matches coscope/rollout/rho_v3.py). Strict
+        # full-set Jaccard collapses to 0 whenever any sibling-solver pair has
+        # disjoint ancestors (FORK / FORK_MERGE / INDEPENDENT), producing a
+        # bimodal {0, 0.5} distribution that cannot span three rho buckets.
+        # Averaging over pairs lets partial overlaps (e.g. a merge node that
+        # consumes from two branches) raise rho smoothly.
+        ious: List[float] = []
+        for a, b in combinations(accessible_sets, 2):
+            union = a | b
+            if not union:
+                continue
+            ious.append(len(a & b) / len(union))
+        if not ious:
             return 0.0
-        return round(len(intersection) / len(union), 4)
+        return round(sum(ious) / len(ious), 4)
 
     # --- caching --------------------------------------------------------
 
