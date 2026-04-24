@@ -102,6 +102,10 @@ class RetrievalPipeline:
             "independent_requests": 0,
             "fallback_triggers": 0,
             "first_stage_retrievals": 0,
+            # A5 SVD path instrumentation: distinguish real truncated SVD from
+            # the identity fallback taken when bucket size n <= svd_rank.
+            "svd_real_projections": 0,
+            "svd_identity_fallbacks": 0,
         }
 
     def retrieve(
@@ -114,6 +118,26 @@ class RetrievalPipeline:
         self._stats["retrieval_calls"] += 1
         self._stats["requests_processed"] += len(requests)
         variant = self._normalize_variant(self.config.variant)
+
+        # A7/A8 differ from A6 only in the query text supplied to retrieval:
+        #   A7 = raw sub-question (no Step 2 LLM rewrite)
+        #   A8 = LLM-generated query_intent (Step 2 enabled)
+        # Both reuse the full A6 pipeline below. We mutate a shallow copy of
+        # each request's query so downstream bucketing/encoding sees the new
+        # string without changing the caller-visible object.
+        if variant == "a8":
+            rewritten = []
+            for r in requests:
+                qi = (r.metadata or {}).get("query_intent")
+                if qi and isinstance(qi, str) and qi.strip():
+                    new_req = self._clone_request_with_query(r, qi.strip())
+                    rewritten.append(new_req)
+                else:
+                    rewritten.append(r)
+            requests = rewritten
+            variant = "a6"  # delegate to A6 pipeline below
+        elif variant == "a7":
+            variant = "a6"  # A7 = A6 on raw query (current default behavior)
 
         if variant == "a1":
             results = {
@@ -135,9 +159,20 @@ class RetrievalPipeline:
             self._stats["shareable_buckets"] += 1
             return self._order_results(requests, results, started)
 
+        # Per paper §14.4.1: A5 uses scope-only routing (no block routing),
+        # A6 adds hierarchical block routing on top of A5.
+        # a4_norerank / a5_norerank: isolate SVD vs mean-query first-stage
+        # ranking power by disabling the hybrid full-dim rerank.
+        scope_only_routing = variant in {
+            "a3", "a4", "a4_nofb", "a4_norerank", "a5", "a5_noproj", "a5_norerank"
+        }
+        use_identity_projection = variant == "a5_noproj"
+        skip_fulldim_rerank = variant == "a5_norerank"
+        is_svd_family = variant in {"a5", "a5_noproj", "a5_norerank", "a6"}
+
         routing = (
             self._route_scope_only(requests)
-            if variant in {"a3", "a4"}
+            if scope_only_routing
             else self.router.route(requests)
         )
         self._stats["shareable_buckets"] += len(routing.shareable_buckets)
@@ -160,18 +195,39 @@ class RetrievalPipeline:
                     enable_fallback=self.config.enable_private_fallback,
                     metadata_mode="a4_shared_mean",
                 )
-            else:
+            elif variant == "a4_nofb":
+                bucket_results = self._retrieve_mean_bucket(
+                    bucket,
+                    enable_rerank=self.config.enable_rerank,
+                    enable_fallback=False,
+                    metadata_mode="a4_nofb_shared_mean",
+                )
+            elif variant == "a4_norerank":
+                bucket_results = self._retrieve_mean_bucket(
+                    bucket,
+                    enable_rerank=False,
+                    enable_fallback=self.config.enable_private_fallback,
+                    metadata_mode="a4_norerank_shared_mean",
+                )
+            elif is_svd_family:
                 bucket_results = self._retrieve_svd_bucket(
                     bucket,
-                    metadata_mode="a5_query_matrix_svd",
+                    metadata_mode=f"{variant}_query_matrix_svd",
+                    use_identity_projection=use_identity_projection,
+                    skip_fulldim_rerank=skip_fulldim_rerank,
                 )
+            else:
+                raise ValueError(f"Unsupported variant in bucket dispatch: {variant}")
             results.update({result.request_id: result for result in bucket_results})
 
         for request in routing.independent_requests:
             result = self._retrieve_independent(
                 request,
-                use_fallback=variant not in {"a3"},
+                use_fallback=variant not in {"a3", "a4_nofb"},
                 metadata_mode=f"{variant}_independent",
+                enable_rerank=(
+                    False if variant in {"a4_norerank", "a5_norerank"} else None
+                ),
             )
             results[result.request_id] = result
 
@@ -205,9 +261,19 @@ class RetrievalPipeline:
         self,
         bucket: RetrievalBucket,
         metadata_mode: str,
+        use_identity_projection: bool = False,
+        skip_fulldim_rerank: bool = False,
     ) -> List[RetrievalResult]:
         query_matrix = self.matrix_builder.build(bucket.requests, self.embedding_provider)
-        projection_result = self._svd_projection(query_matrix)
+        projection_result = self._svd_projection(
+            query_matrix,
+            use_identity_projection=use_identity_projection,
+        )
+        strategy = projection_result.metadata.get("strategy", "")
+        if strategy == "identity_fallback_for_small_bucket":
+            self._stats["svd_identity_fallbacks"] += 1
+        else:
+            self._stats["svd_real_projections"] += 1
 
         context = RetrievalContext(
             scope_id=bucket.primary_scope,
@@ -221,18 +287,67 @@ class RetrievalPipeline:
             top_k=self.config.shared_top_k,
         )
         self._stats["first_stage_retrievals"] += 1
-        score_by_id = {
-            memory.memory_id: float(score)
-            for memory, score in zip(pool.candidates, pool.scores)
-        }
+
+        # Hybrid A5: SVD selects the shared pool in batch, but per-agent
+        # ranking uses the original full-dim embedding space to avoid the
+        # resolution loss incurred by scoring in a min(n, svd_rank)-dim
+        # subspace. For the a5_norerank ablation we instead score each agent
+        # in the SVD subspace directly (Z[i] vs K), which is the faithful
+        # realization of "Q matrix + projection + no full-dim rerank" and
+        # isolates the first-stage ranking power of SVD vs mean query.
+        pool_embeddings = np.vstack(
+            [self._embedding_for(memory) for memory in pool.candidates]
+        ) if pool.candidates else np.zeros((0, 1), dtype="float32")
+
+        if skip_fulldim_rerank and pool.candidates:
+            # Pre-compute K in the projected subspace so scoring costs O(n*r)
+            # per bucket instead of O(n*k). Z is (n, r), K is (m, r).
+            W_final = projection_result.projection_matrix
+            Z_all = projection_result.projected
+            K_proj = pool_embeddings @ W_final
+            K_norms = np.linalg.norm(K_proj, axis=1, keepdims=True)
+            K_norms[K_norms == 0] = 1.0
+            K_proj_normed = K_proj / K_norms
 
         out: List[RetrievalResult] = []
-        for request in bucket.requests:
+        for idx, request in enumerate(bucket.requests):
+            if pool.candidates:
+                if skip_fulldim_rerank:
+                    z_vec = Z_all[idx]
+                    z_norm = np.linalg.norm(z_vec)
+                    if z_norm == 0:
+                        z_norm = 1.0
+                    scores = (K_proj_normed @ z_vec) / z_norm
+                else:
+                    q_vec = query_matrix.embeddings[:, idx]
+                    q_vec = self._l2_normalize(q_vec)
+                    pool_norms = np.linalg.norm(pool_embeddings, axis=1, keepdims=True)
+                    pool_norms[pool_norms == 0] = 1.0
+                    scores = (pool_embeddings @ q_vec) / pool_norms.squeeze(-1)
+                score_by_id = {
+                    memory.memory_id: float(scores[i])
+                    for i, memory in enumerate(pool.candidates)
+                }
+            else:
+                score_by_id = {}
+
+            # Re-sort pool by per-agent score so _personalize (which walks
+            # memories in order when rerank is off) picks up the right
+            # ranking. For the rerank path, order is overridden by reranker.
+            if pool.candidates and skip_fulldim_rerank:
+                sorted_pairs = sorted(
+                    zip(pool.candidates, scores), key=lambda p: -float(p[1])
+                )
+                personalized_memories = [m for m, _ in sorted_pairs]
+            else:
+                personalized_memories = pool.candidates
+
             shared = self._personalize(
                 request=request,
-                memories=pool.candidates,
+                memories=personalized_memories,
                 score_by_id=score_by_id,
                 source="shared",
+                enable_rerank=False if skip_fulldim_rerank else None,
             )
             fallback = self._fallback(request, shared)
             if fallback.triggered:
@@ -326,6 +441,7 @@ class RetrievalPipeline:
         request: RetrievalRequest,
         use_fallback: bool = True,
         metadata_mode: str = "independent",
+        enable_rerank: Optional[bool] = None,
     ) -> RetrievalResult:
         query_embedding = self.embedding_provider.embed_query(request.query)
         candidates = self.memory_store.search(
@@ -342,6 +458,7 @@ class RetrievalPipeline:
             memories=[c.memory for c in candidates],
             score_by_id=score_by_id,
             source="independent",
+            enable_rerank=enable_rerank,
         )
         fallback = self._fallback(request, shared) if use_fallback else self._no_fallback(
             "Fallback disabled for this experiment variant"
@@ -577,28 +694,53 @@ class RetrievalPipeline:
             routing_metadata={"strategy": "scope_only"},
         )
 
-    def _svd_projection(self, query_matrix):
+    def _svd_projection(self, query_matrix, use_identity_projection: bool = False):
         from coscope.retrieval.projection import ProjectionResult
 
         Q = query_matrix.embeddings
         n = query_matrix.num_queries
 
-        if n < 3:
-            # The docx plan treats SVD as meaningful for n >= 3. For tiny buckets
-            # we still return a deterministic shared representation using the
-            # identity subspace so the pipeline remains runnable.
-            r = min(self.config.svd_rank, Q.shape[0])
-            W_final = np.eye(Q.shape[0], r, dtype="float32")
-            Z = Q.T @ W_final
+        # A5-noproj ablation: skip SVD entirely and use full-rank identity
+        # projection. Equivalent to scoring each query independently in the
+        # original embedding space but still fetching the shared pool in a
+        # single batch. Quantifies the marginal benefit of SVD compression.
+        if use_identity_projection:
+            k_dim = Q.shape[0]
+            W_final = np.eye(k_dim, dtype="float32")
+            Z = Q.T
             return ProjectionResult(
                 projected=Z,
                 projection_matrix=W_final,
-                svd_rank=r,
+                svd_rank=k_dim,
+                mask_applied=False,
+                metadata={
+                    "strategy": "identity_projection_ablation",
+                    "num_queries": n,
+                    "Z_shape": Z.shape,
+                    "W_final_shape": W_final.shape,
+                },
+            )
+
+        if n < 3:
+            # Truncated SVD is only meaningful for n >= 3. For n in {1, 2} we
+            # fall back to a full-rank identity projection so each query keeps
+            # all k embedding dimensions. The previous implementation used
+            # np.eye(k, r) which silently discarded (k - r) of the k dims
+            # (e.g. 352/384 for sentence-transformers + svd_rank=32) and
+            # collapsed A5 on small buckets to an incoherent low-rank match.
+            k_dim = Q.shape[0]
+            W_final = np.eye(k_dim, dtype="float32")  # (k, k), no reduction
+            Z = Q.T  # (n, k)
+            return ProjectionResult(
+                projected=Z,
+                projection_matrix=W_final,
+                svd_rank=k_dim,
                 mask_applied=False,
                 metadata={
                     "strategy": "identity_fallback_for_small_bucket",
                     "num_queries": n,
                     "Z_shape": Z.shape,
+                    "W_final_shape": W_final.shape,
                 },
             )
 
@@ -630,11 +772,52 @@ class RetrievalPipeline:
             "scope_only": "a3",
             "scope_mean": "a3",
             "shared_mean": "a4",
+            "shared_mean_nofb": "a4_nofb",
+            "a4_no_fallback": "a4_nofb",
             "query_matrix_svd": "a5",
             "svd": "a5",
+            "query_matrix_identity": "a5_noproj",
+            "a5_identity": "a5_noproj",
+            "query_matrix_norerank": "a5_norerank",
+            "shared_mean_norerank": "a4_norerank",
+            "query_matrix_svd_block_routing": "a6",
+            "coscope": "a6",
+            "full": "a6",
+            "raw_question_no_step2": "a7",
+            "coscope_no_step2": "a7",
+            "step2_rewrite": "a8",
+            "coscope_with_step2": "a8",
         }
-        value = (variant or "a5").lower()
+        value = (variant or "a6").lower()
         return aliases.get(value, value)
+
+    def _clone_request_with_query(
+        self, request: RetrievalRequest, new_query: str
+    ) -> RetrievalRequest:
+        """Shallow-clone a request while overriding the query string.
+
+        Used by the A8 variant to inject LLM-rewritten query_intent without
+        mutating the caller-visible request object. All other fields (scope,
+        policy, memory_types, metadata, etc.) are preserved as-is.
+        """
+        return RetrievalRequest(
+            request_id=request.request_id,
+            agent_id=request.agent_id,
+            role=request.role,
+            query=new_query,
+            scope=request.scope,
+            memory_types=list(request.memory_types),
+            policy=request.policy,
+            state=request.state,
+            priority=request.priority,
+            metadata=dict(request.metadata or {}),
+        )
+
+    def _embedding_for(self, memory) -> np.ndarray:
+        """Return the embedding for a memory, encoding its content if needed."""
+        if memory.embedding is not None:
+            return np.asarray(memory.embedding, dtype="float32")
+        return self.embedding_provider.embed_query(memory.content)
 
     def _l2_normalize(self, vector: np.ndarray) -> np.ndarray:
         norm = np.linalg.norm(vector)

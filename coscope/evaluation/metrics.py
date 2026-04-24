@@ -33,6 +33,13 @@ class EvaluationReport:
     first_stage_independent: int
     false_merge_count: int
     conflict_request_count: int
+    # Content-level false merge: whether a non-verifier request's top-k
+    # actually contains any restricted (verifier-only) memory. Complements
+    # the routing-level ``false_merge_rate`` above, which only checks whether
+    # a conflict request was placed in a shared bucket.
+    content_false_merge_rate: float = 0.0
+    content_false_merge_count: int = 0
+    content_non_verifier_request_count: int = 0
     per_request: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -42,6 +49,7 @@ class EvaluationReport:
             "mrr_at_k": self.mrr_at_k,
             "first_stage_savings": self.first_stage_savings,
             "false_merge_rate": self.false_merge_rate,
+            "content_false_merge_rate": self.content_false_merge_rate,
             "k": self.k,
             "evaluated_requests": self.evaluated_requests,
             "gold_requests": self.gold_requests,
@@ -49,6 +57,8 @@ class EvaluationReport:
             "first_stage_independent": self.first_stage_independent,
             "false_merge_count": self.false_merge_count,
             "conflict_request_count": self.conflict_request_count,
+            "content_false_merge_count": self.content_false_merge_count,
+            "content_non_verifier_request_count": self.content_non_verifier_request_count,
             "per_request": self.per_request,
         }
 
@@ -153,6 +163,68 @@ def false_merge_counts(
     return false_merges, total
 
 
+def content_false_merge_counts(
+    results: Sequence[RetrievalResult],
+    restricted_memory_ids: Iterable[str],
+    conflict_request_ids: Optional[Iterable[str]] = None,
+    conflict_predicate: Optional[ResultPredicate] = None,
+    k: int = 10,
+) -> tuple[int, int]:
+    """
+    Count content-level false merges.
+
+    A request is counted as a content-level false merge when **it is not the
+    conflict (verifier) request**, yet its top-k retrieved candidates contain
+    at least one memory id in ``restricted_memory_ids`` (the verifier-only
+    content, e.g. POLICY_ISOLATED audit reports).
+
+    Returns ``(leak_count, non_conflict_request_count)``. The denominator is
+    the number of **non-verifier** requests in conflict episodes only; for
+    episodes without conflict (no restricted ids) it is 0 and the rate is 0.
+    """
+    restricted = set(restricted_memory_ids or [])
+    if not restricted:
+        return 0, 0
+
+    conflict_ids = set(conflict_request_ids or [])
+    leaks = 0
+    non_conflict = 0
+
+    for result in results:
+        is_conflict = (
+            conflict_predicate(result)
+            if conflict_predicate is not None
+            else result.request_id in conflict_ids
+        )
+        # Content-level FMR is about *non-verifier* agents seeing
+        # verifier-only content. Skip the verifier's own result.
+        if is_conflict:
+            continue
+        non_conflict += 1
+        top_ids = set(_top_memory_ids(result, k))
+        if top_ids & restricted:
+            leaks += 1
+
+    return leaks, non_conflict
+
+
+def content_false_merge_rate(
+    results: Sequence[RetrievalResult],
+    restricted_memory_ids: Iterable[str],
+    conflict_request_ids: Optional[Iterable[str]] = None,
+    conflict_predicate: Optional[ResultPredicate] = None,
+    k: int = 10,
+) -> float:
+    leaks, total = content_false_merge_counts(
+        results,
+        restricted_memory_ids,
+        conflict_request_ids=conflict_request_ids,
+        conflict_predicate=conflict_predicate,
+        k=k,
+    )
+    return leaks / total if total else 0.0
+
+
 def evaluate_retrieval(
     results: Sequence[RetrievalResult],
     gold_by_request: GoldMap,
@@ -162,6 +234,7 @@ def evaluate_retrieval(
     independent_first_stage: Optional[int] = None,
     conflict_request_ids: Optional[Iterable[str]] = None,
     conflict_predicate: Optional[ResultPredicate] = None,
+    restricted_memory_ids: Optional[Iterable[str]] = None,
 ) -> EvaluationReport:
     """Compute the minimal metric bundle for one retrieval run."""
     stats = pipeline_stats or {}
@@ -179,11 +252,27 @@ def evaluate_retrieval(
         conflict_request_ids=conflict_request_ids,
         conflict_predicate=conflict_predicate,
     )
+    content_leaks, content_total = content_false_merge_counts(
+        results,
+        restricted_memory_ids or [],
+        conflict_request_ids=conflict_request_ids,
+        conflict_predicate=conflict_predicate,
+        k=k,
+    )
+    restricted_set = set(restricted_memory_ids or [])
 
     per_request: Dict[str, Dict[str, Any]] = {}
     for result in results:
         top_ids = _top_memory_ids(result, k)
         gold = set(gold_by_request.get(result.request_id, []))
+        is_conflict = _request_is_conflict(
+            result, conflict_request_ids, conflict_predicate
+        )
+        restricted_hits = (
+            sorted(set(top_ids) & restricted_set)
+            if restricted_set and not is_conflict
+            else []
+        )
         per_request[result.request_id] = {
             "agent_id": result.agent_id,
             "mode": result.metadata.get("mode"),
@@ -192,9 +281,9 @@ def evaluate_retrieval(
             "hits": sorted(set(top_ids) & gold),
             "recall_at_k": recall_values.get(result.request_id),
             "mrr_at_k": mrr_values.get(result.request_id),
-            "false_merged": _is_shared_result(result)
-            if _request_is_conflict(result, conflict_request_ids, conflict_predicate)
-            else False,
+            "false_merged": _is_shared_result(result) if is_conflict else False,
+            "content_leaked": bool(restricted_hits),
+            "restricted_hits": restricted_hits,
         }
 
     return EvaluationReport(
@@ -207,6 +296,9 @@ def evaluate_retrieval(
             independent_first_stage=independent_count,
         ),
         false_merge_rate=false_merges / conflict_count if conflict_count else 0.0,
+        content_false_merge_rate=(
+            content_leaks / content_total if content_total else 0.0
+        ),
         k=k,
         evaluated_requests=len(results),
         gold_requests=len(recall_values),
@@ -214,6 +306,8 @@ def evaluate_retrieval(
         first_stage_independent=independent_count,
         false_merge_count=false_merges,
         conflict_request_count=conflict_count,
+        content_false_merge_count=content_leaks,
+        content_non_verifier_request_count=content_total,
         per_request=per_request,
     )
 

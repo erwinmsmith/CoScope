@@ -16,7 +16,12 @@ from coscope.evaluation.metrics import EvaluationReport, GoldMap, ResultPredicat
 from coscope.evaluation.metrics import evaluate_retrieval
 
 
-DEFAULT_VARIANTS = ("a1", "a2", "a3", "a4", "a5")
+DEFAULT_VARIANTS = (
+    "a1", "a2", "a3",
+    "a4", "a4_nofb", "a4_norerank",
+    "a5", "a5_noproj", "a5_norerank",
+    "a6",
+)
 
 
 @dataclass
@@ -36,6 +41,7 @@ class VariantRun:
             "mrr_at_k": self.report.mrr_at_k,
             "first_stage_savings": self.report.first_stage_savings,
             "false_merge_rate": self.report.false_merge_rate,
+            "content_false_merge_rate": self.report.content_false_merge_rate,
             "first_stage_actual": self.report.first_stage_actual,
             "first_stage_independent": self.report.first_stage_independent,
             "shareable_buckets": self.pipeline_stats.get("shareable_buckets", 0),
@@ -54,6 +60,7 @@ def evaluate_variants(
     conflict_request_ids: Optional[Iterable[str]] = None,
     conflict_predicate: Optional[ResultPredicate] = None,
     independent_first_stage: Optional[int] = None,
+    restricted_memory_ids: Optional[Iterable[str]] = None,
 ) -> List[VariantRun]:
     """
     Run several retrieval variants on the same requests and evaluate them.
@@ -87,6 +94,7 @@ def evaluate_variants(
             independent_first_stage=denominator,
             conflict_request_ids=conflict_request_ids,
             conflict_predicate=conflict_predicate,
+            restricted_memory_ids=restricted_memory_ids,
         )
         runs.append(
             VariantRun(

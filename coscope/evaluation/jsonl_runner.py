@@ -105,6 +105,7 @@ class StratifiedCell:
     mrr_at_k: float
     first_stage_savings: float
     false_merge_rate: float
+    content_false_merge_rate: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -115,6 +116,7 @@ class StratifiedCell:
             "mrr_at_k": self.mrr_at_k,
             "first_stage_savings": self.first_stage_savings,
             "false_merge_rate": self.false_merge_rate,
+            "content_false_merge_rate": self.content_false_merge_rate,
         }
 
 
@@ -198,10 +200,25 @@ def _preload_memories(coscope: CoScope, episode: Episode) -> int:
     directly; embeddings are filled in with the engine's configured provider
     when missing.
     """
+    # Batch embed any memories that arrived without an embedding. This is the
+    # dominant per-episode cost when running offline embedders on 10k+ episodes,
+    # so we prefer a single batched call over N one-at-a-time ``embed_query``
+    # invocations. Engines whose provider only exposes ``embed_query`` fall
+    # back to the per-entry path.
+    pending = [e for e in episode.memory_entries if e.embedding is None]
+    if pending:
+        provider = coscope.embedding_provider
+        batch_fn = getattr(provider, "embed_texts", None)
+        if batch_fn is not None:
+            vectors = batch_fn([e.content for e in pending])
+            for entry, vec in zip(pending, vectors):
+                entry.embedding = vec
+        else:
+            for entry in pending:
+                entry.embedding = provider.embed_query(entry.content)
+
     added = 0
     for entry in episode.memory_entries:
-        if entry.embedding is None:
-            entry.embedding = coscope.embedding_provider.embed_query(entry.content)
         coscope.memory_store.add(entry)
         added += 1
     return added
@@ -258,6 +275,9 @@ def _aggregate(
             mrr_at_k=sum(r.mrr_at_k for r in reports) / n,
             first_stage_savings=sum(r.first_stage_savings for r in reports) / n,
             false_merge_rate=sum(r.false_merge_rate for r in reports) / n,
+            content_false_merge_rate=(
+                sum(r.content_false_merge_rate for r in reports) / n
+            ),
         )
     return report
 
@@ -325,6 +345,21 @@ def evaluate_jsonl(
         _register_episode_agents(coscope, episode)
         _preload_memories(coscope, episode)
 
+        # Restricted (verifier-only) memory ids for this episode. The Schema
+        # defines the 'restricted' layer as audit / quarantine / policy-isolated
+        # content that must never surface in non-verifier results. We gate the
+        # set on policy_conflict so non-S4 episodes contribute nothing to the
+        # content-level FMR denominator.
+        restricted_ids = (
+            [
+                m.memory_id
+                for m in episode.memory_entries
+                if "restricted" in (m.scope_id or "").lower()
+            ]
+            if episode.policy_conflict
+            else []
+        )
+
         variant_runs = evaluate_variants(
             coscope=coscope,
             requests=episode.retrieval_requests,
@@ -333,6 +368,7 @@ def evaluate_jsonl(
             k=k,
             conflict_request_ids=conflict_ids if conflict_ids else None,
             independent_first_stage=len(episode.retrieval_requests),
+            restricted_memory_ids=restricted_ids if restricted_ids else None,
         )
 
         subset = _assign_subset(episode)

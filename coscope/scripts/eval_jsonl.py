@@ -98,7 +98,13 @@ def main() -> int:
     parser.add_argument(
         "--metrics",
         nargs="+",
-        default=["recall_at_k", "mrr_at_k", "false_merge_rate", "first_stage_savings"],
+        default=[
+            "recall_at_k",
+            "mrr_at_k",
+            "false_merge_rate",
+            "content_false_merge_rate",
+            "first_stage_savings",
+        ],
         help="Metrics to print as stratified tables.",
     )
     parser.add_argument(

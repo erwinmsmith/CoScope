@@ -174,6 +174,11 @@ class InMemoryMemoryStore:
         self, memory: MemoryEntry, policy: PolicyConstraints
     ) -> bool:
         """Check if memory satisfies policy constraints."""
+        # A None policy means no policy filter (e.g. scope-only routing for
+        # the A5 / A5-noproj ablations, which intentionally skip policy
+        # merging). Accept all memories in that case.
+        if policy is None:
+            return True
         # Check visibility
         if policy.visibility:
             requested = {v.value if hasattr(v, "value") else str(v) for v in policy.visibility}

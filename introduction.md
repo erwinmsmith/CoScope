@@ -558,7 +558,7 @@ Proposed：Scope-Overlap-Aware Collaborative Retrieval
 
 | 数据集 | task_shared 写入方式 | 特殊说明 |
 |---|---|---|
-| MuSiQue | online（每轮实时写入） | 主力数据集，唯一覆盖 S1–S4 |
+| MuSiQue | online（每轮实时写入） | 主力数据集，完整覆盖 S1–S4 |
 | 2WikiMultiHopQA | online | comparison 类适合构造 S2 场景 |
 | HotpotQA | online | 候选池固定10条（2 gold + 8 distractor） |
 | GSM8K | oracle（步骤预写入） | gold 计算结论预写入 task_shared |
@@ -714,9 +714,11 @@ C_i_final（每个 agent 的最终候选集）
 
 ## 14.4 对比方法
 
-### 14.4.1 内部消融（A1–A10）
+### 14.4.1 内部消融（A1–A8）
 
-执行顺序：A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8（全部无需训练）。
+GoT / CoT / ToT 三种推理结构各自独立构造 JSONL，各自独立跑 A1–A8 全部变体，独立出结果表。
+
+变体定义如下（三种推理结构下完全相同）：
 
 | 变体 | 描述 |
 |---|---|
@@ -726,12 +728,12 @@ C_i_final（每个 agent 的最终候选集）
 | A4 | scope 分桶 + 个体重排 + private fallback，无 query matrix |
 | A5 | scope 分桶 + batch query matrix + SVD + 重排 + fallback，无 block routing |
 | A6 | A5 + block routing |
-| A7 | 去掉 Step 2（直接用 raw question 做 query），其余与 A5 相同 |
+| A7 | 去掉 Step 2（直接用 raw question 做 query），其余与 A6 相同 |
 | A8 | 完整方法：全组件开启，含 Step 2 检索前推理 |
-| A9 | GoT 推理结构 + A8（主实验默认） |
-| A10 | CoT / ToT 推理结构 + A8（分别构造 JSONL，独立评测） |
 
-**消融轴对照：**
+执行顺序：A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8（全部无需训练）。
+
+**消融轴对照（组件边际贡献，在每种推理结构下各自成立）：**
 
 | 对比 | 验证内容 |
 |---|---|
@@ -741,7 +743,12 @@ C_i_final（每个 agent 的最终候选集）
 | A5 vs A6 | block routing 的效率与精度收益 |
 | A7 vs A8 | Step 2 检索前推理的收益 |
 | A2 on S4 | 无差别共享的安全风险（FMR） |
-| A9 vs A10 | 推理结构对 fallback 和任务完成的影响 |
+
+**推理结构对比（跨 JSONL 水平对比）：**
+
+| 对比 | 验证内容 |
+|---|---|
+| GoT-A8 vs CoT-A8 vs ToT-A8 | 三套推理结构下完整方法的横向对比，量化结构对 fallback、任务完成与检索效率的影响 |
 
 ### 14.4.2 外部对比方法
 
@@ -749,13 +756,16 @@ C_i_final（每个 agent 的最终候选集）
 |---|---|---|---|
 | BM25 | 稀疏检索 | 全部五个 | 词频检索，无跨 agent 共享，检索下界 |
 | DPR | 密集检索 | 全部五个 | 双编码器，每个 agent 独立运行 |
-| ColBERT | 晚交互检索 | 全部五个 | 晚交互模型，每个 agent 独立运行 |
-| MemWalker | 记忆管理 | MuSiQue、HotpotQA | 树形记忆结构导航式检索 |
-| MemMA | 记忆管理 | MuSiQue、HotpotQA | 多 agent 记忆管理，代码开源 |
-| HippoRAG | RAG | 全部多跳问答 | 知识图谱 RAG，不适用于数学推理类 |
-| Iter-RetGen | 迭代检索 | 全部五个 | 迭代式检索生成 |
+| MemMA | 多 agent 记忆管理 | MuSiQue、2Wiki、HotpotQA | 原生多 agent 记忆架构，代码开源，定位最接近 |
+| Collaborative Memory | 多 agent 协同记忆 | 多跳问答 | agent 间记忆协作机制，直接对标本文 "scope overlap-aware" 思想 |
+| AMA (Adaptive Memory Agent) | 多 agent 自适应记忆 | 多跳问答 | 动态记忆分配，验证是否依赖 scope/policy 显式建模 |
+| CoMAM (Cooperative Multi-Agent Memory) | 多 agent 合作记忆 | 多跳问答 | 合作式共享策略，验证显式 bucket 划分的效率收益 |
+| LegalMALR（裁剪版） | 多 agent 法律检索 | 多跳问答（裁剪通用化） | 原法律领域多 agent 检索系统，去除领域特化后跑通用 QA |
+| L-MARS（裁剪版） | 多 agent 检索 RL | 多跳问答（裁剪通用化） | 强化学习驱动的多 agent 检索，裁剪为无 RL 版本作 retrieval 对照 |
 
-注：GSM8K/MATH 仅运行 BM25、DPR、ColBERT、Iter-RetGen。
+注：
+- GSM8K / MATH 数学推理类仅运行 BM25 和 DPR，其他多 agent 系统不适配数学推理场景。
+- LegalMALR / L-MARS 的裁剪版仅保留检索机制，去除原系统中的领域特化模块。
 
 ---
 
@@ -817,13 +827,69 @@ S4 列仅报告 FMR，不报告任务完成指标。
 
 ## 14.6 评测指标
 
-**任务完成质量**：EM / F1（多跳问答类）、Accuracy（数学推理类）
+评测指标分三层：**检索质量**（模式 B 核心，所有数据集通用）、**任务完成质量**（模式 A 端到端，分数据集特化）、**效率与安全性**（所有数据集通用）。
 
-**检索质量**：Recall@k、MRR@k、Evidence Hit Rate、Answer Support Rate
+### 14.6.1 检索质量（模式 B 通用）
 
-**效率**：Shared-first-stage Savings、Fallback Necessity Rate、平均端到端延迟
+模式 B 的核心验证对象。ground_truth 来自 JSONL 的 `ground_truth` 字段，memory_id 精确对应，不依赖 LLM 随机性。
 
-**分桶安全性**：False Merge Rate（FMR，S4 专用）、Shareability Precision / Recall
+| 指标 | 定义 | 报告粒度 |
+|---|---|---|
+| **Recall@k** | 每个 retrieval request 的 top-k 中命中 gold memory 的比例，按 request 平均 | k=5, 10；按 S1/S2/S3 分层 |
+| **MRR@k** | Mean Reciprocal Rank，首个命中 gold 的倒数排名，按 request 平均 | k=10；按 S1/S2/S3 分层 |
+| **Evidence Hit Rate** | 每个 episode 的所有 agent 的 top-k 的并集是否完整覆盖 supporting facts | 按 episode 平均 |
+| **Answer Support Rate** | top-k 检索结果中是否包含足以推出最终答案的 memory（需要 gold chain 标注） | 按 episode 平均 |
+
+### 14.6.2 任务完成质量（模式 A 端到端，分数据集特化）
+
+模式 A 才有的指标。每个数据集的 gold 形式不同，metric 也不同。
+
+**多跳问答类（MuSiQue / 2WikiMultiHopQA / HotpotQA）：**
+
+| 指标 | 定义 | 说明 |
+|---|---|---|
+| **EM (Exact Match)** | 最终答案字符串归一化后严格匹配 gold answer | 主指标 |
+| **F1** | token-level F1，最终答案 tokens 与 gold answer tokens 的 F1 | 主指标 |
+| **Supporting Facts EM/F1** | 模型引用的 supporting facts 与 gold 的严格/F1 匹配 | 仅 HotpotQA（原数据集自带标注） |
+| **Joint EM/F1** | 答案与 supporting facts 同时匹配 | 仅 HotpotQA |
+
+**数学推理类（GSM8K / MATH）：**
+
+| 指标 | 定义 | 说明 |
+|---|---|---|
+| **Accuracy（GSM8K）** | 最终数值答案字符串匹配（归一化数字格式） | 主指标 |
+| **Accuracy（MATH）** | 最终表达式通过 sympy 等价性判定匹配 gold | 主指标 |
+| **Step Accuracy** | 每个中间推理步骤的结论是否与 oracle 步骤一致 | 可选，GSM8K/MATH 均适用 |
+| **Formula Hit Rate（MATH）** | workspace_semantic 中预写入的公式/定理是否被模型正确引用 | MATH 专用 |
+
+### 14.6.3 效率（所有数据集通用）
+
+| 指标 | 定义 | 适用模式 |
+|---|---|---|
+| **Shared-first-stage Savings** | `1 - 实际 first-stage 检索次数 / n`（n = 请求数）；A1 为 0，其他变体越高越好 | 模式 B |
+| **Fallback Necessity Rate** | 个体 rerank 后触发 private fallback 的比例 | 模式 B |
+| **平均端到端延迟（ms）** | 从 request 集合到返回所有 retrieval 结果的总耗时 | 模式 B |
+| **任务平均轮数** | 完整任务从 Step 1 到最终答案经历的轮数 | 模式 A |
+| **任务平均端到端延迟** | 完整任务的总耗时（含 LLM 推理） | 模式 A |
+
+### 14.6.4 分桶安全性（S4 专用，所有数据集通用）
+
+| 指标 | 定义 | 说明 |
+|---|---|---|
+| **Routing FMR** | 有 policy 冲突的请求被错误放进同一共享桶的比例 | 路由层检测，A2 预期≈1.0，A8 预期≈0.0 |
+| **Content FMR** | 非 Verifier 的 top-k 实际包含 restricted memory 的比例 | 内容层检测，最严格的安全指标 |
+| **Shareability Precision** | 被系统判定为可共享的请求对中，实际 scope/policy 确实兼容的比例 | 越高越好 |
+| **Shareability Recall** | 实际应该共享的请求对中，被系统正确识别并合并的比例 | 越高越好 |
+
+### 14.6.5 各数据集指标套装汇总
+
+| 数据集 | 模式 B 检索指标 | 模式 A 任务指标 | S4 安全性指标 |
+|---|---|---|---|
+| MuSiQue | Recall@k, MRR@k, Evidence Hit Rate | EM, F1 | Routing FMR, Content FMR |
+| 2WikiMultiHopQA | Recall@k, MRR@k, Evidence Hit Rate | EM, F1 | Routing FMR, Content FMR |
+| HotpotQA | Recall@k, MRR@k, Evidence Hit Rate | EM, F1, Sup-EM/F1, Joint EM/F1 | Routing FMR, Content FMR |
+| GSM8K | Recall@k, MRR@k | Accuracy, Step Accuracy | Routing FMR, Content FMR |
+| MATH | Recall@k, MRR@k | Accuracy（sympy 等价）, Formula Hit Rate | Routing FMR, Content FMR |
 
 ---
 
@@ -835,20 +901,22 @@ S4 列仅报告 FMR，不报告任务完成指标。
 
 - **Scope 分桶（A1 vs A3）**：效率收益为主，关注 first-stage savings 和延迟变化，预期质量提升有限
 - **个体 rerank + fallback（A3 vs A4）**：关注 Recall@k 和 Evidence Hit Rate 提升，预期在 S2 部分重叠子集最显著
-- **Batch query matrix + SVD（A4 vs A5）**：核心机制收益，保留 query 方向差异的价值，预期 Recall@k 提升最显著，在 S1 高重叠子集收益最大
+- **Batch query matrix + SVD（A4 vs A5）**：**共享候选池的 first-stage 批量化机制**，核心价值在于使同一个 shared bucket 内的多个 agent query 共用一次 first-stage retrieval，是计算效率的共享化；在搭配个体级全维 rerank 的前提下 Recall@k 与 A4 持平，并不直接带来质量提升。SVD 的价值是（i）为多 agent 提供统一的候选池接口，（ii）为后续 block routing 与 policy 隔离提供结构基础
 - **Block routing（A5 vs A6）**：关注 S1 高重叠场景下 memory slice 规模最大时的延迟收益
 - **Step 2 检索前推理（A7 vs A8）**：query 更精准，query matrix 方向差异更真实，预期 Recall@k 提升，在 S2 效果最显著
 - **Policy 安全性（A2 on S4）**：FMR 接近 1，证明无差别共享的安全风险；A8 on S4 FMR 接近 0，证明分权隔离的有效性
 
 ### 14.7.2 SVD 有效秩 r 的敏感性分析
 
-Truncated SVD 的截断秩 r 是唯一超参数，在 r ∈ {8, 16, 32, 64} 上做网格搜索，分析对 Recall@10 的影响曲线：
+**重要声明：**在现代 dense encoder（k 大约 384–1024）与典型 multi-agent bucket size（n = 3–5）下，有效秩 r = min(r_config, n, k) 被 n 硬约束，往往减少到 3–5。因此 r_config 上界对 **天花板表现**并无防御性影响。
 
-- r 过小：共享子空间表达能力不足，多 agent query 方向被过度压缩，Recall@10 下降
-- r 过大：SVD 退化为不截断，与 query 均值效果接近，batch query matrix 的收益消失
-- 预期最优 r 在 16–32 之间，在 MuSiQue dev 上确定后固定用于其余数据集
+重点实验：
 
-此外分析 bucket 内 agent 数 n 对 SVD 有效性的影响：n < 3 时 query 方向不足，SVD 主方向不稳定，退化接近 A4（query 均值）；n ≥ 3 时开始体现多方向结构收益。
+- 在 r_config ∈ {8, 16, 32, 64} 上网格搜索，测量实际有效秩改变对 Recall@10 、latency、first-stage savings 的影响
+- 预期 r_config ≥ n 时 Recall@10 达到上限并饱和，仅 latency 随 r_config 增长
+- 低维 embedding (k ≤ n 时或 k 高但 r_config 接近 k 时) 下 SVD 截断的信号损失才会引起质量下降
+
+另外分析 bucket 内 agent 数 n 对 SVD 效率价值的影响：n = 1 时 SVD 退化为单 query 检索，共享化无收益；n ≥ 3 时 first-stage 批量化收益随 n 线性增长。
 
 ### 14.7.3 Scope 重叠程度的影响
 
@@ -872,9 +940,11 @@ SVD 是无监督方法，不依赖任何训练数据，天然具备跨数据集�
 - 若在 MuSiQue 上确定的最优 r，在 2WikiMultiHopQA、HotpotQA、GSM8K、MATH 上的表现
 - 两类数据集（多跳问答 vs 数学推理）的提升幅度差异及原因分析
 
-### 14.7.6 推理结构的影响（A9 vs A10）
+### 14.7.6 推理结构的影响
 
-GoT / CoT / ToT 三套 JSONL 分别构造，在各自子集划分下独立评测，验证推理结构对检索和任务完成指标的影响：
+GoT / CoT / ToT 三套 JSONL 各自独立构造、独立跑 A1–A8。主表报告各推理结构下 A8 vs A1 的提升幅度对比，量化完整方法相对独立检索的增益是否随结构变化。组件边际贡献（A2–A7）作为附表在每种结构下选择性报告。
+
+**推理结构横向对比（GoT-A8 vs CoT-A8 vs ToT-A8）：**
 
 | 指标 | GoT 预期 | ToT 预期 | CoT 预期 | 原因 |
 |---|---|---|---|---|
