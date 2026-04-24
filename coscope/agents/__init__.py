@@ -1,5 +1,8 @@
 """CoScope Agent Integrations."""
 
+from coscope.agents.planner_builder import PlannerAgentBuilder
+from coscope.agents.solver_builder import SolverAgentBuilder
+from coscope.agents.verifier_builder import VerifierAgentBuilder
 from coscope.agents.langchain_agent import (
     CoScopeRetrievalTool,
     CoScopeLangChainTool,
@@ -16,6 +19,10 @@ from coscope.agents.langgraph_agent import (
 )
 
 __all__ = [
+    # builders
+    "PlannerAgentBuilder",
+    "SolverAgentBuilder",
+    "VerifierAgentBuilder",
     # LangChain
     "CoScopeRetrievalTool",
     "CoScopeLangChainTool",

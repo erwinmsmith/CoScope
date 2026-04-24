@@ -89,6 +89,12 @@ logs/
 # Leading slash anchors to repo root so coscope/data/ (source code) is NOT ignored.
 /data/
 
+# Large dataset artifacts under coscope/data/ (raw corpora, processed shards, interim)
+# Keep directory structure via .gitkeep only; actual data is regenerated locally.
+coscope/data/raw/
+coscope/data/processed/
+coscope/data/interim/
+
 # Temporary files
 *.tmp
 *.bak
