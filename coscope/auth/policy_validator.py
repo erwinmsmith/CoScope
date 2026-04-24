@@ -164,11 +164,16 @@ class PolicyValidator:
 
     def _check_episode_id(self, ep: Episode, result: ValidationResult) -> None:
         """§16.1(1): episode_id must follow `{dataset}_{split}_{original_id}_{graph_type}`."""
+        reasoning = (
+            ep.reasoning_path_type.value.lower()
+            if hasattr(ep.reasoning_path_type, "value")
+            else str(ep.reasoning_path_type).lower()
+        )
         gt = ep.graph_type.value if isinstance(ep.graph_type, GraphType) else str(ep.graph_type)
-        expected_suffix = f"_{gt}"
+        expected_suffix = f"_{reasoning}_{gt}"
         if not ep.episode_id.endswith(expected_suffix):
             result.add_error(
-                f"episode_id {ep.episode_id!r} does not end with graph_type "
+                f"episode_id {ep.episode_id!r} does not end with reasoning+graph "
                 f"suffix {expected_suffix!r}"
             )
         if ep.dataset and not ep.episode_id.startswith(ep.dataset.replace("/", "_")):

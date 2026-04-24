@@ -13,9 +13,9 @@ adds an Evaluator step to pick the best branch, see `TOT_EVALUATOR_PROMPT`).
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
-from coscope.core.types import GoTGraph, GraphType
+from coscope.core.types import GoTGraph, GraphType, InvalidGraphError
 from coscope.graph.got.graph_builder import GraphBuilder
 
 
@@ -26,12 +26,35 @@ class TreeBuilder:
         self.seed = seed
         self._delegate = GraphBuilder(seed=seed)
 
-    def build(self, raw_item: Dict[str, Any], dataset: str, seed: int = 42) -> GoTGraph:
-        """Build a fan-out tree (FORK GoT template) for this raw_item."""
+    def build(
+        self,
+        raw_item: Dict[str, Any],
+        *,
+        dataset: str,
+        target_graph_type: Union[str, GraphType] = GraphType.FORK,
+        seed: int = 42,
+    ) -> GoTGraph:
+        """Build a ToT graph.
+
+        ToT is represented by the FORK template in the current codebase.
+        POLICY_ISOLATED is also allowed so S4 can be constructed under the
+        ToT reasoning-path tag.
+        """
+        if isinstance(target_graph_type, str):
+            try:
+                target_graph_type = GraphType(target_graph_type)
+            except ValueError as exc:
+                raise InvalidGraphError(
+                    f"Unknown graph_type for ToT: {target_graph_type!r}"
+                ) from exc
+        if target_graph_type not in (GraphType.FORK, GraphType.POLICY_ISOLATED):
+            raise InvalidGraphError(
+                "ToT currently supports only FORK and POLICY_ISOLATED graph types"
+            )
         return self._delegate.build(
             raw_item=raw_item,
             dataset=dataset,
-            target_graph_type=GraphType.FORK,
+            target_graph_type=target_graph_type,
             seed=seed,
         )
 

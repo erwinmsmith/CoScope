@@ -16,7 +16,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
-from coscope.core.types import Episode, GraphType, SubsetLabel
+from coscope.core.types import Episode, GraphType, ReasoningPathType, SubsetLabel
 from coscope.utils.loaders import get_loader
 from coscope.utils.output.serializer import Serializer
 from coscope.utils.output.stats_reporter import StatsReporter, SubsetCoverageError
@@ -39,12 +39,17 @@ class DatasetPipeline:
         data_dir: Union[str, Path] = "coscope/data/raw",
         reasoning_path_type: str = "got",
     ):
-        self.episode_builder = episode_builder or EpisodeBuilder()
+        self.reasoning_path_type = reasoning_path_type.lower()
+        self.reasoning_path_enum = self._normalize_reasoning_path_type(
+            reasoning_path_type
+        )
+        self.episode_builder = episode_builder or EpisodeBuilder(
+            reasoning_path_type=self.reasoning_path_enum
+        )
         self.serializer = serializer or Serializer()
         self.stats_reporter = stats_reporter or StatsReporter()
         self.processed_dir = Path(processed_dir)
         self.data_dir = Path(data_dir)
-        self.reasoning_path_type = reasoning_path_type.lower()
 
     @property
     def reasoning_root(self) -> Path:
@@ -153,7 +158,15 @@ class DatasetPipeline:
         out: List[Episode] = []
         with ProcessPoolExecutor(max_workers=max_workers) as pool:
             futures = [
-                pool.submit(_build_one, raw, dataset, split, gt, seed)
+                pool.submit(
+                    _build_one,
+                    raw,
+                    dataset,
+                    split,
+                    gt,
+                    seed,
+                    self.reasoning_path_type,
+                )
                 for raw, gt in tasks
             ]
             for fut in as_completed(futures):
@@ -233,6 +246,16 @@ class DatasetPipeline:
         value = graph_type.value if hasattr(graph_type, "value") else str(graph_type)
         return value.lower()
 
+    @staticmethod
+    def _normalize_reasoning_path_type(value: str) -> ReasoningPathType:
+        raw = str(value or "").strip().lower()
+        mapping = {
+            "got": ReasoningPathType.GOT,
+            "cot": ReasoningPathType.COT,
+            "tot": ReasoningPathType.TOT,
+        }
+        return mapping.get(raw, ReasoningPathType.GOT)
+
 
 # ============================================================
 # Worker helper (top-level for pickling)
@@ -245,12 +268,13 @@ def _build_one(
     split: str,
     target_graph_type: Union[str, GraphType],
     seed: int,
+    reasoning_path_type: str,
 ) -> Optional[Dict[str, Any]]:
     """Worker entry point used in the ProcessPoolExecutor path."""
     from coscope.utils.output.serializer import Serializer as _Ser
     from coscope.construction.episode_builder import EpisodeBuilder as _Builder
 
-    builder = _Builder()
+    builder = _Builder(reasoning_path_type=reasoning_path_type)
     ep = builder.build_episode(
         raw_item=raw,
         dataset=dataset,

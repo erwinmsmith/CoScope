@@ -68,14 +68,29 @@ def main() -> None:
         reasoning_path_type=args.reasoning_path_type,
     )
 
+    reasoning_graph_types = {
+        "got": {
+            GraphType.LINEAR,
+            GraphType.FORK,
+            GraphType.FORK_MERGE,
+            GraphType.INDEPENDENT,
+            GraphType.POLICY_ISOLATED,
+        },
+        "cot": {GraphType.LINEAR, GraphType.POLICY_ISOLATED},
+        "tot": {GraphType.FORK, GraphType.POLICY_ISOLATED},
+    }
+    allowed_graph_types = reasoning_graph_types[args.reasoning_path_type]
+
     for dataset in args.datasets:
         base_types: List[GraphType] = list(
             DEFAULT_GRAPH_TYPES_BY_DATASET.get(dataset, [GraphType.LINEAR])
         )
+        base_types = [gt for gt in base_types if gt in allowed_graph_types]
         for split in args.splits:
             target_types = list(base_types)
             if args.include_s4 and split == "test":
-                target_types.append(GraphType.POLICY_ISOLATED)
+                if GraphType.POLICY_ISOLATED in allowed_graph_types:
+                    target_types.append(GraphType.POLICY_ISOLATED)
             print(f"=> {dataset}/{split}  graph_types={[t.value for t in target_types]}")
             written = pipeline.run(
                 dataset=dataset,

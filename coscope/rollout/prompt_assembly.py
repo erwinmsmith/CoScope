@@ -11,10 +11,20 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from coscope.core.types import GoTNode, ReasoningPathType
+from coscope.graph.cot.prompt_templates import (
+    COT_PLANNER_PROMPT,
+    COT_SOLVER_PROMPT,
+    COT_VERIFIER_PROMPT_TEMPLATES,
+)
 from coscope.graph.got.prompt_templates import (
     GOT_PLANNER_PROMPT,
     GOT_SOLVER_PROMPT,
     GOT_VERIFIER_PROMPT_TEMPLATES,
+)
+from coscope.graph.tot.prompt_templates import (
+    TOT_PLANNER_PROMPT,
+    TOT_SOLVER_PROMPT,
+    TOT_VERIFIER_PROMPT_TEMPLATES,
 )
 
 
@@ -31,13 +41,22 @@ def build_planner_prompt(
 ) -> str:
     question = str(raw_item.get("question", "")).strip()
     hop_count = int(raw_item.get("hop_count", 2) or 2)
-    # GoT is the canonical template; CoT/ToT swap happens here (v1.1).
-    return GOT_PLANNER_PROMPT.format(
-        question=question,
-        hop_count=hop_count,
-        node_id=node.node_id,
-        parent_node_ids=",".join(node.parent_node_ids),
-    )
+    if reasoning_path_type == ReasoningPathType.COT:
+        template = COT_PLANNER_PROMPT
+    elif reasoning_path_type == ReasoningPathType.TOT:
+        template = TOT_PLANNER_PROMPT
+    else:
+        template = GOT_PLANNER_PROMPT
+    kwargs = {
+        "question": question,
+        "hop_count": hop_count,
+        "node_id": node.node_id,
+        "parent_node_ids": ",".join(node.parent_node_ids),
+    }
+    if reasoning_path_type == ReasoningPathType.TOT:
+        kwargs["branch_count"] = hop_count
+        kwargs["depth"] = max(1, hop_count)
+    return template.format(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -114,14 +133,25 @@ def build_solver_prompt(
     hop = int(node.hop_index or 0)
     sub_q = _sub_question_for_hop(raw_item, hop, prior_conclusions)
     evidence = _evidence_for_hop(raw_item, hop)
-    base = GOT_SOLVER_PROMPT.format(
-        node_id=node.node_id,
-        hop_index=hop,
-        sub_question=sub_q,
-        parent_node_ids=",".join(node.parent_node_ids),
-        child_node_ids=",".join(node.child_node_ids),
-        prior_conclusions=_format_prior_conclusions(prior_conclusions),
-    )
+    if reasoning_path_type == ReasoningPathType.COT:
+        template = COT_SOLVER_PROMPT
+    elif reasoning_path_type == ReasoningPathType.TOT:
+        template = TOT_SOLVER_PROMPT
+    else:
+        template = GOT_SOLVER_PROMPT
+    kwargs = {
+        "node_id": node.node_id,
+        "hop_index": hop,
+        "sub_question": sub_q,
+        "parent_node_ids": ",".join(node.parent_node_ids),
+        "child_node_ids": ",".join(node.child_node_ids),
+        "prior_conclusions": _format_prior_conclusions(prior_conclusions),
+        "hop_index_minus_one": max(0, hop - 1),
+    }
+    if reasoning_path_type == ReasoningPathType.TOT:
+        kwargs["branch_id"] = node.node_id
+        kwargs["branch_goal"] = sub_q
+    base = template.format(**kwargs)
     if evidence:
         base += f"\nRetrieved evidence:\n  {evidence}\n"
     return base
@@ -140,8 +170,15 @@ def build_verifier_prompt(
     dataset: str,
     reasoning_path_type: ReasoningPathType,
 ) -> str:
-    template = GOT_VERIFIER_PROMPT_TEMPLATES.get(
-        dataset, GOT_VERIFIER_PROMPT_TEMPLATES.get("musique", "请核查推理图中各节点结论。")
+    if reasoning_path_type == ReasoningPathType.COT:
+        templates = COT_VERIFIER_PROMPT_TEMPLATES
+    elif reasoning_path_type == ReasoningPathType.TOT:
+        templates = TOT_VERIFIER_PROMPT_TEMPLATES
+    else:
+        templates = GOT_VERIFIER_PROMPT_TEMPLATES
+    template = templates.get(
+        dataset,
+        templates.get("musique", "Please audit the reasoning trace."),
     )
     summary = "\n".join(f"  - {c}" for c in all_conclusions) or "  - (no conclusions)"
     return (

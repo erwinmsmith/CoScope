@@ -93,16 +93,19 @@ class ArtifactRolloutEngine:
                 trace, planner, role="planner", raw_item=raw_item,
                 prior_conclusions=[], dataset=dataset, episode_id=episode_id,
                 parent_ids=[], topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
             self._emit_scratch(
                 trace, planner, role="planner", raw_item=raw_item,
                 prior_conclusions=[], dataset=dataset, episode_id=episode_id,
                 parent_ids=[], topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
             planner_plan_id = self._emit_plan(
                 trace, planner, raw_item=raw_item,
                 dataset=dataset, episode_id=episode_id,
                 parent_ids=[], topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
 
         # --- 2. Solvers in topological order --------------------------
@@ -130,18 +133,21 @@ class ArtifactRolloutEngine:
                 prior_conclusions=prior_conclusions,
                 dataset=dataset, episode_id=episode_id,
                 parent_ids=parent_ids, topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
             self._emit_scratch(
                 trace, node, role="solver", raw_item=raw_item,
                 prior_conclusions=prior_conclusions,
                 dataset=dataset, episode_id=episode_id,
                 parent_ids=parent_ids, topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
             concl_id = self._emit_conclusion(
                 trace, node, raw_item=raw_item,
                 prior_conclusions=prior_conclusions,
                 dataset=dataset, episode_id=episode_id,
                 parent_ids=parent_ids, topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
             node_to_conclusion_id[node.node_id] = concl_id
 
@@ -161,18 +167,21 @@ class ArtifactRolloutEngine:
                 prior_conclusions=all_conclusions, dataset=dataset,
                 episode_id=episode_id, parent_ids=all_conclusion_ids,
                 topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
             self._emit_scratch(
                 trace, verifier, role="verifier", raw_item=raw_item,
                 prior_conclusions=all_conclusions, dataset=dataset,
                 episode_id=episode_id, parent_ids=all_conclusion_ids,
                 topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
             self._emit_audit_report(
                 trace, verifier, raw_item=raw_item,
                 all_conclusions=all_conclusions,
                 dataset=dataset, episode_id=episode_id,
                 parent_ids=all_conclusion_ids, topo_counter=topo_counter,
+                reasoning_path_type=reasoning_path_type,
             )
 
         # --- 4. Post hoc: populate consumer_index ---------------------
@@ -262,11 +271,12 @@ class ArtifactRolloutEngine:
         role: str, raw_item: Dict[str, Any],
         prior_conclusions: List[str], dataset: str, episode_id: str,
         parent_ids: List[str], topo_counter: Dict[str, int],
+        reasoning_path_type: ReasoningPathType,
     ) -> str:
         prompt = prompt_assembly.build_query_intent_prompt(
             role=role, raw_item=raw_item, node=node,
             prior_conclusions=prior_conclusions,
-            reasoning_path_type=ReasoningPathType.GOT,
+            reasoning_path_type=reasoning_path_type,
         )
         content, source = self._call_llm_or_fallback(
             prompt,
@@ -287,11 +297,12 @@ class ArtifactRolloutEngine:
         role: str, raw_item: Dict[str, Any],
         prior_conclusions: List[str], dataset: str, episode_id: str,
         parent_ids: List[str], topo_counter: Dict[str, int],
+        reasoning_path_type: ReasoningPathType,
     ) -> str:
         prompt = prompt_assembly.build_scratch_prompt(
             role=role, raw_item=raw_item, node=node,
             prior_conclusions=prior_conclusions,
-            reasoning_path_type=ReasoningPathType.GOT,
+            reasoning_path_type=reasoning_path_type,
         )
         content, source = self._call_llm_or_fallback(
             prompt,
@@ -311,9 +322,10 @@ class ArtifactRolloutEngine:
         self, trace: ArtifactTrace, node: GoTNode, *,
         raw_item: Dict[str, Any], dataset: str, episode_id: str,
         parent_ids: List[str], topo_counter: Dict[str, int],
+        reasoning_path_type: ReasoningPathType,
     ) -> str:
         prompt = prompt_assembly.build_planner_prompt(
-            raw_item=raw_item, node=node, reasoning_path_type=ReasoningPathType.GOT,
+            raw_item=raw_item, node=node, reasoning_path_type=reasoning_path_type,
         )
         content, source = self._call_llm_or_fallback(
             prompt, fallback_fn=lambda: fallback_synth.synth_plan(raw_item),
@@ -329,10 +341,11 @@ class ArtifactRolloutEngine:
         raw_item: Dict[str, Any], prior_conclusions: List[str],
         dataset: str, episode_id: str,
         parent_ids: List[str], topo_counter: Dict[str, int],
+        reasoning_path_type: ReasoningPathType,
     ) -> str:
         prompt = prompt_assembly.build_solver_prompt(
             raw_item=raw_item, node=node, prior_conclusions=prior_conclusions,
-            reasoning_path_type=ReasoningPathType.GOT,
+            reasoning_path_type=reasoning_path_type,
         )
         content, source = self._call_llm_or_fallback(
             prompt, fallback_fn=lambda: fallback_synth.synth_solver_conclusion(raw_item, node),
@@ -352,10 +365,11 @@ class ArtifactRolloutEngine:
         raw_item: Dict[str, Any], all_conclusions: List[str],
         dataset: str, episode_id: str,
         parent_ids: List[str], topo_counter: Dict[str, int],
+        reasoning_path_type: ReasoningPathType,
     ) -> str:
         prompt = prompt_assembly.build_verifier_prompt(
             raw_item=raw_item, node=node, all_conclusions=all_conclusions,
-            dataset=dataset, reasoning_path_type=ReasoningPathType.GOT,
+            dataset=dataset, reasoning_path_type=reasoning_path_type,
         )
         content, source = self._call_llm_or_fallback(
             prompt,

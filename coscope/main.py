@@ -89,9 +89,9 @@ def _process_one(
     rollout_engine,
     subset_assigner,
     serializer,
+    reasoning_path_type,
 ):
     """Return (episode_dict, rho) or (None, reason) on failure."""
-    from coscope.core.types import ReasoningPathType
     from coscope.rollout.rho_v3 import compute_rho
     from coscope.rollout.trace_validator import validate_trace
 
@@ -107,7 +107,7 @@ def _process_one(
     trace = rollout_engine.run(
         raw_item=raw_item, got_graph=ep.got_graph,
         dataset=dataset, episode_id=ep.episode_id,
-        reasoning_path_type=ReasoningPathType.GOT,
+        reasoning_path_type=reasoning_path_type,
     )
     tr_result = validate_trace(trace, ep.got_graph)
     if not tr_result.passed:
@@ -139,7 +139,7 @@ def _process_one(
 
 def run_build(args) -> int:
     from coscope.construction import EpisodeBuilder
-    from coscope.core.types import GraphType
+    from coscope.core.types import GraphType, ReasoningPathType
     from coscope.rollout import ArtifactRolloutEngine
     from coscope.rollout.rollout_engine import RolloutConfig
     from coscope.utils.loaders import get_loader
@@ -151,7 +151,44 @@ def run_build(args) -> int:
     logger.info("Backend: llm=%s embedder=%s seed=%d", llm.name,
                 embedder.name if embedder else "none", args.seed)
 
-    episode_builder = EpisodeBuilder()
+    reasoning_mapping = {
+        "got": ReasoningPathType.GOT,
+        "cot": ReasoningPathType.COT,
+        "tot": ReasoningPathType.TOT,
+    }
+    reasoning_path_type = reasoning_mapping.get(
+        str(args.reasoning_path_type).lower(),
+        ReasoningPathType.GOT,
+    )
+
+    episode_builder = EpisodeBuilder(reasoning_path_type=reasoning_path_type)
+    allowed_graph_types = {
+        ReasoningPathType.GOT: {
+            GraphType.LINEAR,
+            GraphType.FORK,
+            GraphType.FORK_MERGE,
+            GraphType.INDEPENDENT,
+            GraphType.POLICY_ISOLATED,
+        },
+        ReasoningPathType.COT: {GraphType.LINEAR, GraphType.POLICY_ISOLATED},
+        ReasoningPathType.TOT: {GraphType.FORK, GraphType.POLICY_ISOLATED},
+    }[reasoning_path_type]
+
+    graph_types = [GraphType(gt_str) for gt_str in args.graph_types]
+    graph_types = [gt for gt in graph_types if gt in allowed_graph_types]
+    if not graph_types:
+        raise ValueError(
+            f"No valid graph types remain for reasoning_path_type={reasoning_path_type.value}"
+        )
+    skipped_graph_types = [
+        gt_str for gt_str in args.graph_types if GraphType(gt_str) not in allowed_graph_types
+    ]
+    if skipped_graph_types:
+        logger.warning(
+            "Skipping incompatible graph types for %s: %s",
+            reasoning_path_type.value,
+            ", ".join(skipped_graph_types),
+        )
     engine = ArtifactRolloutEngine(
         llm,
         config=RolloutConfig(seed=args.seed, temperature=args.temperature,
@@ -187,8 +224,7 @@ def run_build(args) -> int:
                 return shard_handles[key]
 
             try:
-                for gt_str in args.graph_types:
-                    gt = GraphType(gt_str)
+                for gt in graph_types:
                     print(f"\n=== {dataset}/{split} | graph_type = {gt.value} " + "=" * 20)
                     for idx, raw in enumerate(raw_items):
                         oid = str(raw.get("original_id", f"item_{idx}"))
@@ -200,6 +236,7 @@ def run_build(args) -> int:
                             rollout_engine=engine,
                             subset_assigner=subset_assigner,
                             serializer=serializer,
+                            reasoning_path_type=reasoning_path_type,
                         )
                         dt = time.perf_counter() - t0
                         if ep_dict is None:
