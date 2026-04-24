@@ -87,7 +87,9 @@ logs/
 
 # Dataset artifacts and local-only data workspace (not tracked in git)
 # Leading slash anchors to repo root so coscope/data/ (source code) is NOT ignored.
-/data/
+# Track the empty skeleton via .gitkeep; ignore all real data files.
+/data/*
+!/data/.gitkeep
 
 # Large dataset artifacts under coscope/data/ (raw corpora, processed shards, interim)
 # Keep directory structure via .gitkeep only; actual data is regenerated locally.
