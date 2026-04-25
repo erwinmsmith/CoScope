@@ -1,16 +1,16 @@
-# Core dependencies
+# =====================================================================
+# Dependencies are declared in pyproject.toml — this file is kept as a
+# convenience for "pip install -r requirements.txt" workflows. Both files
+# must stay in sync; pyproject.toml is the source of truth.
+# =====================================================================
+
+# Core (matches pyproject.toml [project.dependencies])
 numpy>=1.24.0
 pydantic>=2.0.0
 tenacity>=8.2.0
 
-# Optional: LangChain integration
-# langchain>=0.1.0
-# langchain-core>=0.1.0
-
-# Optional: LangGraph integration
-# langgraph>=0.0.20
-
-# Development dependencies
-# pytest>=7.4.0
-# pytest-asyncio>=0.21.0
-# ruff>=0.1.0
+# Optional extras — install via the corresponding pyproject extras instead:
+#   pip install -e ".[langchain]"
+#   pip install -e ".[langgraph]"
+#   pip install -e ".[dev]"
+#   pip install -e ".[all]"

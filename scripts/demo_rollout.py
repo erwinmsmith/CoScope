@@ -20,7 +20,7 @@ from core.types import GraphType, ReasoningPathType
 from graph.got.graph_builder import GraphBuilder
 from dataio.loaders import get_loader
 from rollout import ArtifactRolloutEngine
-from rollout.rho_v3 import compute_rho
+from rollout.rho_calculator import compute_rho
 from rollout.rollout_engine import RolloutConfig
 from llm.template import TemplateLLMClient
 from rollout.trace_validator import validate_trace

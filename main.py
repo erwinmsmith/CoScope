@@ -92,7 +92,7 @@ def _process_one(
 ):
     """Return (episode_dict, rho) or (None, reason) on failure."""
     from core.types import ReasoningPathType
-    from rollout.rho_v3 import compute_rho
+    from rollout.rho_calculator import compute_rho
     from rollout.trace_validator import validate_trace
 
     # (1) static episode

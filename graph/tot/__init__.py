@@ -1,6 +1,6 @@
 """ToT (Tree-of-Thought) module: prompt templates, tree builder, rho calculator."""
 
-from graph.tot.prompt_templates import (
+from prompts.graph.tot import (
     TOT_EVALUATOR_PROMPT,
     TOT_PLANNER_PROMPT,
     TOT_SOLVER_PROMPT,

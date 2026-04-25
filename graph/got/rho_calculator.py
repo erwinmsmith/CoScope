@@ -82,7 +82,7 @@ class RhoCalculator:
             # if the set is non-empty to flag the degenerate graph.
             return 1.0 if accessible_sets[0] else 0.0
 
-        # Pairwise mean IoU (matches coscope/rollout/rho_v3.py). Strict
+        # Pairwise mean IoU (matches coscope/rollout/rho_calculator.py). Strict
         # full-set Jaccard collapses to 0 whenever any sibling-solver pair has
         # disjoint ancestors (FORK / FORK_MERGE / INDEPENDENT), producing a
         # bimodal {0, 0.5} distribution that cannot span three rho buckets.
