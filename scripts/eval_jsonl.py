@@ -3,7 +3,7 @@ CLI entry point for Mode-B JSONL evaluation (§14.5.1 algorithm evaluation).
 
 Usage
 -----
-    python -m coscope.scripts.eval_jsonl \\
+    python -m scripts.eval_jsonl \\
         --shards tests/tmp/processed/got/musique/dev/*.jsonl \\
         --variants a1 a3 a4 a5 \\
         --k 10 \\
@@ -147,7 +147,7 @@ def main() -> int:
     level = getattr(logging, args.log_level.upper(), logging.WARNING)
     logging.basicConfig(level=level)
     # Engine and pipeline submodules configure their own handlers; align them.
-    for name in ("coscope", "coscope.engine", "coscope.retrieval", "coscope.memory"):
+    for name in ("coscope", "engine", "retrieval", "coscope.memory"):
         logging.getLogger(name).setLevel(level)
 
     shard_paths = _expand_shards(args.shards)

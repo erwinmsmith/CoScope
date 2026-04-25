@@ -3,7 +3,7 @@ Rollout subpackage.
 
 Contains the offline LLM-driven MAS rollout engine that materializes the
 system-layer artifact trace for each episode (plans, scratches, conclusions,
-audit reports). See `coscope/data/docs/SystemLayer_Rollout_Design_v1.md`.
+audit reports). See `docs/SystemLayer_Rollout_Design_v1.md`.
 
 Public surface is intentionally small; concrete LLM backends are opt-in
 imports to avoid pulling heavy deps at package import time.

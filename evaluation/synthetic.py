@@ -306,7 +306,7 @@ def build_s4_policy_conflict() -> SyntheticCase:
 
 def _base_coscope() -> CoScope:
     coscope = CoScope()
-    coscope.data.pipeline.config.fallback_threshold = 2
+    graph.pipeline.config.fallback_threshold = 2
     return coscope
 
 

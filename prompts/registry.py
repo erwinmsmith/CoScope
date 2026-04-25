@@ -144,7 +144,7 @@ def list_keys() -> Iterable[str]:
 def _bootstrap_builtin_prompts() -> None:
     """Register all built-in prompts.
 
-    Imports directly from :mod:`coscope.prompts.graph` (canonical source) and
+    Imports directly from :mod:`prompts.graph` (canonical source) and
     from inline constants for the rollout headers. Idempotent and defensive.
     """
     # Graph prompts — prompts/graph/ is the single source of truth.

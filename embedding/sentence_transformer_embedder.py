@@ -1,7 +1,7 @@
 """
 Sentence-Transformers embedder adapter.
 
-Implements both the canonical `coscope.core.interfaces.Embedder` Protocol
+Implements both the canonical `core.interfaces.Embedder` Protocol
 (``embed`` / ``embed_batch``) and the retrieval-side `EmbeddingProvider`
 shape expected by the engine pipeline (``embed_query`` / ``embed_texts``),
 so a single instance can be dropped into either code path.
@@ -70,7 +70,7 @@ class SentenceTransformerEmbedder(Embedder):
         )
 
     # ------------------------------------------------------------------
-    # coscope.core.interfaces.Embedder (canonical)
+    # core.interfaces.Embedder (canonical)
     # ------------------------------------------------------------------
 
     def embed(self, text: str) -> np.ndarray:

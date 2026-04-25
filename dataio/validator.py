@@ -1,7 +1,7 @@
 """
 Cross-episode / cross-file validators.
 
-Single-episode validation lives in `coscope.data.auth.policy_validator`.
+Single-episode validation lives in `graph.auth.policy_validator`.
 This module adds batch-level checks (leakage, S4 placement, distribution).
 """
 

@@ -1,7 +1,7 @@
 """
 CoT (Chain-of-Thought) prompt templates — internal implementation.
 
-Per `coscope/data/docs/GoT_Dataset_Requirements_v2.md` §18.4, CoT prompts are maintained
+Per `docs/GoT_Dataset_Requirements_v2.md` §18.4, CoT prompts are maintained
 inside the project. External implementations (e.g. langchain.prompts chain
 templates, Wei et al. 2022 released prompt collections) MUST NOT be imported
 at runtime. The Verifier template dictionary is kept byte-identical to the GoT

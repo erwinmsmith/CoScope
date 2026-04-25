@@ -3,7 +3,7 @@ Rho calculator (v2.1).
 
 rho is the Jaccard similarity across **Solver**-accessible MemoryEntry sets,
 computed statically from the GoTGraph ancestor relation and the precomputed
-memory store. See `coscope/data/docs/GoT_Dataset_Requirements_v2.md` §9.1.
+memory store. See `docs/GoT_Dataset_Requirements_v2.md` §9.1.
 
 Accessibility model (v2.1-aligned):
 

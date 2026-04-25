@@ -2,8 +2,8 @@
 Generate and freeze dev splits for GSM8K / MATH from their train sets.
 
 Usage:
-    python -m coscope.scripts.split_dev --dataset gsm8k --data-dir data/raw/gsm8k
-    python -m coscope.scripts.split_dev --dataset math --data-dir data/raw/math
+    python -m scripts.split_dev --dataset gsm8k --data-dir data/raw/gsm8k
+    python -m scripts.split_dev --dataset math --data-dir data/raw/math
 """
 
 from __future__ import annotations

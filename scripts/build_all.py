@@ -6,7 +6,7 @@ shards to `data/processed/`. Intended for large-scale builds; use
 `DatasetPipeline` directly for single-slice runs.
 
 Usage:
-    python -m coscope.scripts.build_all \\
+    python -m scripts.build_all \\
         --datasets musique 2wikimhqa hotpotqa gsm8k math \\
         --splits dev test \\
         --data-dir data/raw --processed-dir data/processed
@@ -44,8 +44,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Full dataset construction")
     parser.add_argument("--datasets", nargs="+", required=True)
     parser.add_argument("--splits", nargs="+", default=["dev"])
-    parser.add_argument("--data-dir", default="coscope/data/raw")
-    parser.add_argument("--processed-dir", default="coscope/data/processed")
+    parser.add_argument("--data-dir", default="data/raw")
+    parser.add_argument("--processed-dir", default="data/processed")
     parser.add_argument("--reasoning-path-type", default="got",
                         choices=["got", "cot", "tot"],
                         help="Subdirectory under processed/ (default: got)")

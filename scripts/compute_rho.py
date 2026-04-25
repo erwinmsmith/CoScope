@@ -6,7 +6,7 @@ Run it when you want to warm the on-disk cache before large-scale construction,
 or to re-verify previously generated episodes.
 
 Usage:
-    python -m coscope.scripts.compute_rho --dataset musique --split dev
+    python -m scripts.compute_rho --dataset musique --split dev
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Warm the rho cache for serialized episodes.")
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--split", default="dev")
-    parser.add_argument("--processed-dir", default="coscope/data/processed")
-    parser.add_argument("--cache-dir", default="coscope/data/interim/rho_cache")
+    parser.add_argument("--processed-dir", default="data/processed")
+    parser.add_argument("--cache-dir", default="data/interim/rho_cache")
     args = parser.parse_args()
 
     root = Path(args.processed_dir) / args.dataset / args.split

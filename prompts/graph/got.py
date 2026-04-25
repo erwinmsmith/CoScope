@@ -2,7 +2,7 @@
 GoT (Graph-of-Thought) prompt template strings — canonical source.
 
 These are the raw template strings. All placeholder contracts are documented
-in :mod:`coscope.graph.got.prompt_templates` (which re-exports from here).
+in :mod:`graph.got.prompt_templates` (which re-exports from here).
 """
 
 from __future__ import annotations

@@ -57,7 +57,7 @@ def main():
 
     crud = MemoryCRUD(
         memory_store=coscope.memory_store,
-        embedding_provider=coscope.embedding_provider,
+        embedding_provider=embedding_provider,
     )
 
     # Bulk create memories

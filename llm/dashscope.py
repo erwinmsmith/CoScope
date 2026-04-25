@@ -1,7 +1,7 @@
 """
 DashScope (Aliyun Qwen) LLM client — OpenAI-compatible mode.
 
-Implements the LLMClient Protocol defined in `coscope.core.interfaces`.
+Implements the LLMClient Protocol defined in `core.interfaces`.
 Reads API key from env `DASHSCOPE_API_KEY` or from constructor.
 
 Defaults to `qwen-plus`. Supported models include:

@@ -1,10 +1,10 @@
 """
 ToT tree builder.
 
-Per `coscope/data/docs/GoT_Dataset_Requirements_v2.md` §18.5, ToT is a tree-shaped
+Per `docs/GoT_Dataset_Requirements_v2.md` §18.5, ToT is a tree-shaped
 reasoning structure with fan-out but no merge; this corresponds structurally to
 the GoT `FORK` graph template. This builder is a thin wrapper over
-`coscope.data.got.graph_builder.GraphBuilder` pinned to `GraphType.FORK`.
+`graph.got.graph_builder.GraphBuilder` pinned to `GraphType.FORK`.
 
 Downstream episodes are tagged with `reasoning_path_type=TOT` to distinguish
 them from GoT/FORK episodes (same structure, different inference contract: ToT

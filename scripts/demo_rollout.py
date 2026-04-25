@@ -6,7 +6,7 @@ graph type, validates the resulting traces, and prints rho distribution. Use
 this as the sanity check for schema and runtime logic before scaling up.
 
 Run:
-    python -m coscope.scripts.demo_rollout
+    python -m scripts.demo_rollout
 or route via main.py.
 """
 
@@ -66,7 +66,7 @@ def run_demo(
         GraphType.INDEPENDENT, GraphType.POLICY_ISOLATED,
     ]
 
-    loader = get_loader(dataset, data_dir=f"coscope/data/raw/{dataset}", split=split)
+    loader = get_loader(dataset, data_dir=f"data/raw/{dataset}", split=split)
     raw_items = list(loader.load())[:n_items]
     if not raw_items:
         print(f"No raw items for {dataset}/{split}; aborting.")

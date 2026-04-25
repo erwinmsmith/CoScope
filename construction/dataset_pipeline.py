@@ -35,8 +35,8 @@ class DatasetPipeline:
         episode_builder: Optional[EpisodeBuilder] = None,
         serializer: Optional[Serializer] = None,
         stats_reporter: Optional[StatsReporter] = None,
-        processed_dir: Union[str, Path] = "coscope/data/processed",
-        data_dir: Union[str, Path] = "coscope/data/raw",
+        processed_dir: Union[str, Path] = "data/processed",
+        data_dir: Union[str, Path] = "data/raw",
         reasoning_path_type: str = "got",
     ):
         self.episode_builder = episode_builder or EpisodeBuilder()

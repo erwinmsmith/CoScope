@@ -6,7 +6,7 @@ graph instance for the requested parameters. Templates intentionally construct
 both the node list and edge list, so the resulting GoTGraph is ready to be
 validated by `GoTGraph.validate()`.
 
-Design decisions (see `coscope/data/docs/GoT_Dataset_Requirements_v2.md` and the
+Design decisions (see `docs/GoT_Dataset_Requirements_v2.md` and the
 Cascade session notes for context):
 
 - `POLICY_ISOLATED` is the only graph type that adds a Verifier node.

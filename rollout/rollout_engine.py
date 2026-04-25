@@ -7,7 +7,7 @@ as input from `data/got/graph_templates.py`.
 
 This file is intentionally a stub: method bodies raise NotImplementedError.
 A follow-up change implements them once the design is signed off.
-See `coscope/data/docs/SystemLayer_Rollout_Design_v1.md` §7.
+See `docs/SystemLayer_Rollout_Design_v1.md` §7.
 """
 
 from __future__ import annotations

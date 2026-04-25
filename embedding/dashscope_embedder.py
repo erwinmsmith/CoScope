@@ -1,7 +1,7 @@
 """
 DashScope text-embedding-v3 embedder.
 
-Implements the Embedder Protocol defined in `coscope.core.interfaces`.
+Implements the Embedder Protocol defined in `core.interfaces`.
 - Default dim 1024 (v3 supports 1024 / 768 / 512).
 - Max 25 texts per API call; this class auto-chunks.
 - Reads API key from env `DASHSCOPE_API_KEY`.

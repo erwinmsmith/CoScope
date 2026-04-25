@@ -22,7 +22,7 @@ QA datasets generate credibility scores per `supporting_facts` sentence.
 Math datasets generate per-step numerical-consistency records.
 
 Usage:
-    python -m coscope.scripts.generate_restricted \\
+    python -m scripts.generate_restricted \\
         --dataset musique --split train --data-dir data/raw/musique
 """
 

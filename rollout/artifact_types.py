@@ -1,4 +1,4 @@
-"""Re-export shim — canonical definitions moved to coscope.core.artifact_types."""
+"""Re-export shim — canonical definitions moved to core.artifact_types."""
 from core.artifact_types import (  # noqa: F401
     ArtifactSlot,
     ArtifactTrace,

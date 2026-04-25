@@ -1,5 +1,5 @@
 """
-Artifact schema conventions on top of coscope.core.types.MemoryEntry.
+Artifact schema conventions on top of core.types.MemoryEntry.
 
 Defines ArtifactSlot enum and the three canonical mapping tables:
   slot -> scope_layer, memory_type, visibility.

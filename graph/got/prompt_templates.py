@@ -1,11 +1,11 @@
 """
 GoT (Graph-of-Thought) prompt templates — internal implementation.
 
-Per `coscope/data/docs/GoT_Dataset_Requirements_v2.md` §18.3, prompts for the three
+Per `docs/GoT_Dataset_Requirements_v2.md` §18.3, prompts for the three
 reasoning-path structures (GoT / CoT / ToT) must be fully internalized.
 Importing from external prompt libraries (langchain.prompts, llama_index.prompts,
 haystack.nodes.prompt, guidance, promptflow, ...) is forbidden here and enforced
-by `coscope/data/scripts/check_prompt_isolation.py`.
+by `scripts/check_prompt_isolation.py`.
 
 GoT is this project's original design; no external source exists to vendor.
 These strings are the canonical reference used by GoT Planner / Solver / Verifier

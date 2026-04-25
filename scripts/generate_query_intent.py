@@ -4,7 +4,7 @@ CoScope pipeline) and patch it back into JSONL episode shards so the A8
 variant can replay retrieval with the rewritten query.
 
 Usage:
-    python -m coscope.scripts.generate_query_intent \
+    python -m scripts.generate_query_intent \
         --shards 'tests/tmp/processed/got/musique/test/s1*.jsonl' \
         --dataset musique --split test \
         --max-episodes 200 \
@@ -300,7 +300,7 @@ def main():
     p.add_argument(
         "--data-dir",
         default=None,
-        help="Raw dataset dir, defaults to coscope/data/raw/<dataset>",
+        help="Raw dataset dir, defaults to data/raw/<dataset>",
     )
     p.add_argument("--llm", choices=["dashscope", "template"], default="template")
     p.add_argument("--model", default=None)
@@ -329,7 +329,7 @@ def main():
         print("No shards matched; aborting.", file=sys.stderr)
         sys.exit(2)
 
-    data_dir = args.data_dir or f"coscope/data/raw/{args.dataset}"
+    data_dir = args.data_dir or f"data/raw/{args.dataset}"
     raw_items = _load_raw_items(args.dataset, args.split, data_dir)
     print(f"[generate_query_intent] loaded {len(raw_items)} raw items from {data_dir}/{args.split}")
 

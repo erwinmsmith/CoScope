@@ -9,7 +9,7 @@ Design notes:
   serialization. It is regenerated at runtime.
 - `Agent` does not provide `to_dict`, so we serialize its config + state here.
 - `RetrievalRequest` is serialized via the existing
-  `coscope.core.types.RetrievalRequestModel`.
+  `core.types.RetrievalRequestModel`.
 """
 
 from __future__ import annotations

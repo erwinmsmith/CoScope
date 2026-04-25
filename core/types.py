@@ -1013,7 +1013,7 @@ class Episode:
     """
     A single multi-agent experiment unit.
 
-    agents, memory_entries, and retrieval_requests hold coscope.core.types
+    agents, memory_entries, and retrieval_requests hold core.types
     objects directly so an Episode can be fed into the CoScope runtime
     via to_runtime_objects() without format conversion.
     """

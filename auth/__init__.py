@@ -1,7 +1,7 @@
-"""Deprecated: authorization lives under :mod:`coscope.memory.crud.auth`.
+"""Deprecated: authorization lives under :mod:`memory.crud.auth`.
 
 This module is a thin re-export kept for backward compatibility. New code
-should import from :mod:`coscope.memory.crud` directly.
+should import from :mod:`memory.crud` directly.
 """
 
 from memory.crud.auth import (

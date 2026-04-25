@@ -1,7 +1,7 @@
 """
 Subset assigner (S1 / S2 / S3 / S4).
 
-See `coscope/data/docs/GoT_Dataset_Requirements_v2.md` section 10.
+See `docs/GoT_Dataset_Requirements_v2.md` section 10.
 
 - S1 / S2 / S3 are mutually exclusive and determined by rho thresholds.
 - S4 is orthogonal: an episode whose `graph_type == POLICY_ISOLATED` is marked
@@ -27,7 +27,7 @@ class SubsetThresholds:
         S2: s2_min  <  rho  <=  s1_min
         S3: rho <=  s2_min
 
-    Defaults match `coscope/data/dataset_config/yaml/subset_thresholds.yaml`.
+    Defaults match `config/yaml/subset_thresholds.yaml`.
     """
 
     s1_min: float = 0.6
@@ -60,7 +60,7 @@ DEFAULT_THRESHOLDS = SubsetThresholds()  # s1_min=0.6, s2_min=0.4
 
 def load_default_thresholds() -> SubsetThresholds:
     """
-    Resolve thresholds from `coscope/data/dataset_config/yaml/subset_thresholds.yaml` when present,
+    Resolve thresholds from `config/yaml/subset_thresholds.yaml` when present,
     otherwise return `DEFAULT_THRESHOLDS`.
     """
     candidate = Path(__file__).parent.parent.parent / "config" / "yaml" / "subset_thresholds.yaml"

@@ -24,8 +24,8 @@ Runs 20+ invariant checks covering:
   T. cross-shard (original_id, question, answer) consistency
 
 Run:
-    python -m coscope.scripts.audit_jsonl tests/tmp/processed/got/musique/dev
-    python -m coscope.scripts.audit_jsonl coscope/data/processed/got
+    python -m scripts.audit_jsonl tests/tmp/processed/got/musique/dev
+    python -m scripts.audit_jsonl data/processed/got
 """
 
 from __future__ import annotations

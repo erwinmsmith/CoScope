@@ -9,8 +9,8 @@ dependency upgrades.
 
 Usage
 -----
-    python -m coscope.scripts.check_prompt_isolation            # default src dir
-    python -m coscope.scripts.check_prompt_isolation --src other/path
+    python -m scripts.check_prompt_isolation            # default src dir
+    python -m scripts.check_prompt_isolation --src other/path
 
 Exit code is 0 when clean, 1 when at least one violation is found.
 """

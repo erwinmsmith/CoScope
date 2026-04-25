@@ -2,8 +2,8 @@
 Canonical prompt string source for graph-of-thought reasoning structures.
 
 This sub-package is the single source of truth for all GoT / CoT / ToT
-prompt template strings. :mod:`coscope.graph` modules import from here;
-the central :mod:`coscope.prompts.registry` also bootstraps from here.
+prompt template strings. :mod:`graph` modules import from here;
+the central :mod:`prompts.registry` also bootstraps from here.
 
 Adding a new graph type: create ``<type>.py``, expose its constants via
 this ``__init__.py``, and register them in ``registry._bootstrap_builtin_prompts``.

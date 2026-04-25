@@ -1,48 +1,22 @@
 """
-Standalone smoke test for `coscope.data`.
+Standalone smoke test for the data construction pipeline.
 
 This script:
-  1. Installs a stub for `coscope.retrieval.pipeline.RetrievalPipeline` so the
-     broken top-level `coscope/__init__.py` import chain does not crash.
-     (The retrieval pipeline is unrelated to data construction.)
-  2. Builds a synthetic MuSiQue-like raw_item in memory.
-  3. Runs EpisodeBuilder for each graph type and prints key invariants.
-  4. Round-trips via Serializer and verifies the data survives intact.
+  1. Builds a synthetic MuSiQue-like raw_item in memory.
+  2. Runs EpisodeBuilder for each graph type and prints key invariants.
+  3. Round-trips via Serializer and verifies the data survives intact.
 
 Usage:
-    python -m coscope.scripts.smoke_test
+    python -m scripts.smoke_test
 """
 
 from __future__ import annotations
 
 import sys
-import types
 
-
-def _install_retrieval_pipeline_stub() -> None:
-    """Create a minimal `coscope.retrieval.pipeline` module with RetrievalPipeline."""
-    if "coscope.retrieval.pipeline" in sys.modules:
-        return
-    pkg_name = "coscope.retrieval.pipeline"
-    stub = types.ModuleType(pkg_name)
-
-    class RetrievalPipeline:  # noqa: D401
-        """Placeholder RetrievalPipeline (smoke-test stub)."""
-
-        def __init__(self, *args, **kwargs):
-            raise RuntimeError("RetrievalPipeline stub invoked - runtime not wired")
-
-    stub.RetrievalPipeline = RetrievalPipeline
-    sys.modules[pkg_name] = stub
-
-
-_install_retrieval_pipeline_stub()
-
-
-# Deferred imports (after the stub).
-from construction.episode_builder import EpisodeBuilder  # NOTE: build_episode is a method            # noqa: E402
-from core.types import GraphType     # noqa: E402
-from dataio.serializer import Serializer  # noqa: E402
+from construction.episode_builder import EpisodeBuilder
+from core.types import GraphType
+from dataio.serializer import Serializer
 
 
 def _make_raw_item() -> dict:
@@ -111,10 +85,11 @@ def main() -> int:
         GraphType.POLICY_ISOLATED,
     ]
     serializer = Serializer()
+    builder = EpisodeBuilder()
     failures = 0
     for gt in graph_types:
         print(f"--- {gt.value} ---")
-        ep = build_episode(raw, dataset="musique", split="dev", target_graph_type=gt)
+        ep = builder.build_episode(raw, dataset="musique", split="dev", target_graph_type=gt)
         if ep is None:
             print("  build returned None")
             failures += 1

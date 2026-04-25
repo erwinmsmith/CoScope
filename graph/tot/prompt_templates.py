@@ -1,7 +1,7 @@
 """
 ToT (Tree-of-Thought) prompt templates — internal implementation.
 
-Per `coscope/data/docs/GoT_Dataset_Requirements_v2.md` §18.5, ToT prompts are maintained
+Per `docs/GoT_Dataset_Requirements_v2.md` §18.5, ToT prompts are maintained
 inside the project. External ToT implementations (e.g. princeton-nlp/
 tree-of-thought-llm) MUST NOT be imported at runtime; their prompt strings have
 been vendored and adapted here to the CoScope Planner / Solver / Verifier /

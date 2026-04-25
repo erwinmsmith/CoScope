@@ -1,11 +1,11 @@
 """
 CoT chain builder.
 
-Per `coscope/data/docs/GoT_Dataset_Requirements_v2.md` §18.4, CoT is a strict linear
+Per `docs/GoT_Dataset_Requirements_v2.md` §18.4, CoT is a strict linear
 chain `Planner -> Solver_1 -> ... -> Solver_k`, which is structurally the
 degenerate LINEAR case of the GoT graph family. Rather than duplicating the
 graph construction logic, this builder is a thin wrapper over
-`coscope.data.got.graph_builder.GraphBuilder` pinned to `GraphType.LINEAR`.
+`graph.got.graph_builder.GraphBuilder` pinned to `GraphType.LINEAR`.
 
 Keeping the wrapper (instead of directly calling `GraphBuilder`) preserves
 extensibility: if CoT evolves to need extra metadata (e.g. step-level

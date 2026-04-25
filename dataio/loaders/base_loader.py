@@ -1,8 +1,8 @@
 """
-Base loader for coscope.data.
+Base loader for graph.
 
 Each concrete loader is responsible for normalizing a raw dataset into the
-unified `raw_item` schema defined in `coscope/data/docs/GoT_Dataset_Requirements_v2.md`
+unified `raw_item` schema defined in `docs/GoT_Dataset_Requirements_v2.md`
 section 5.2. No episode construction happens here - loaders only do format
 conversion.
 
