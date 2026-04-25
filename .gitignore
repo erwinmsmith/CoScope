@@ -85,17 +85,13 @@ coscope_data/
 *.log
 logs/
 
-# Dataset artifacts and local-only data workspace (not tracked in git)
-# Leading slash anchors to repo root so coscope/data/ (source code) is NOT ignored.
+# Dataset artifacts (raw corpora, processed shards, interim)
 # Track the empty skeleton via .gitkeep; ignore all real data files.
 /data/*
 !/data/.gitkeep
-
-# Large dataset artifacts under coscope/data/ (raw corpora, processed shards, interim)
-# Keep directory structure via .gitkeep only; actual data is regenerated locally.
-coscope/data/raw/
-coscope/data/processed/
-coscope/data/interim/
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
+!/data/interim/.gitkeep
 
 # Temporary files
 *.tmp
@@ -112,7 +108,7 @@ CLAUDE.md
 # Personal notes / design docs that should not be pushed
 /introduction.md
 /coscope流程.md
-/coscope/docs/SystemLayer_Rollout_Design_v1.md
+/docs/SystemLayer_Rollout_Design_v1.md
 
 # Tests directory is local-only (evaluation shards, scratch)
 /tests/

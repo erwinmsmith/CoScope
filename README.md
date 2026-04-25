@@ -19,7 +19,7 @@ CoScope is a framework for efficient collaborative memory retrieval in multi-age
 ## Architecture
 
 ```
-coscope/
+CoScope/                 # repo root (no top-level package wrapper)
 ├── core/                # Types, interfaces, scope IDs, artifact slots
 ├── config/              # Configuration management (YAML + env)
 │
@@ -48,7 +48,7 @@ coscope/
 │   ├── dashscope.py     # DashScopeClient (Qwen API)
 │   └── template.py      # TemplateLLMClient (deterministic, for testing)
 │
-├── io/                  # Data-access and serialisation layer
+├── dataio/                  # Data-access and serialisation layer
 │   ├── serializer.py    # Episode <-> JSONL round-trip
 │   ├── stats_reporter.py
 │   ├── validator.py
@@ -104,8 +104,8 @@ pip install -e ".[langgraph]"
 ## Quick Start
 
 ```python
-from coscope import CoScope
-from coscope.core.types import MemoryType
+from engine import CoScope
+from core.types import MemoryType
 
 # Initialize CoScope
 coscope = CoScope()
@@ -172,7 +172,7 @@ COSCOPE_MEMORY_BACKEND=inmemory
 ### Using Memory CRUD
 
 ```python
-from coscope.memory.crud import MemoryCRUD, MemoryQuery
+from memory.crud import MemoryCRUD, MemoryQuery
 
 crud = MemoryCRUD(memory_store, embedding_provider)
 
@@ -193,7 +193,7 @@ stats = crud.get_stats()
 ### Using Prompt Management
 
 ```python
-from coscope.prompts import PromptManager, RoleTemplates
+from prompts import PromptManager, RoleTemplates
 
 manager = PromptManager()
 
@@ -207,9 +207,9 @@ rendered = manager.render("role/planner", query="What constraints?", task_contex
 ### Custom Retrieval Components
 
 ```python
-from coscope.retrieval.router import OverlapAwareRouter
-from coscope.retrieval.reranker import RoleAwareReranker
-from coscope.retrieval.fusion import ReciprocalRankFusion
+from retrieval.router import OverlapAwareRouter
+from retrieval.reranker import RoleAwareReranker
+from retrieval.fusion import ReciprocalRankFusion
 
 # Use overlap-aware routing
 router = OverlapAwareRouter(min_overlap_score=0.3)
@@ -250,7 +250,7 @@ retrieval:
 ### Minimal Evaluation
 
 ```python
-from coscope.evaluation import evaluate_retrieval
+from evaluation import evaluate_retrieval
 
 results = coscope.retrieve(requests, variant="a5")
 stats = coscope.get_stats()["pipeline_stats"]
@@ -277,7 +277,7 @@ The report includes `recall_at_k`, `mrr_at_k`,
 To compare all no-training variants in one pass:
 
 ```python
-from coscope.evaluation import evaluate_variants, format_variant_table
+from evaluation import evaluate_variants, format_variant_table
 
 runs = evaluate_variants(
     coscope,
@@ -293,19 +293,19 @@ print(format_variant_table(runs))
 There is also a runnable toy example:
 
 ```bash
-python -m coscope.examples.evaluate_variants
+python -m examples.evaluate_variants
 ```
 
 For a slightly broader synthetic suite covering S1/S2/S3/S4-style cases:
 
 ```bash
-python -m coscope.examples.evaluate_synthetic
+python -m examples.evaluate_synthetic
 ```
 
 Programmatic use:
 
 ```python
-from coscope.evaluation import evaluate_synthetic_suite, format_synthetic_table
+from evaluation import evaluate_synthetic_suite, format_synthetic_table
 
 summaries = evaluate_synthetic_suite(k=3)
 print(format_synthetic_table(summaries))
@@ -316,7 +316,7 @@ print(format_synthetic_table(summaries))
 ### LangChain
 
 ```python
-from coscope.agents import CoScopeRetrievalTool
+from agents import CoScopeRetrievalTool
 
 tool = coscope.get_retrieval_tool(agent_id="planner_1")
 # Use as a LangChain tool
@@ -325,7 +325,7 @@ tool = coscope.get_retrieval_tool(agent_id="planner_1")
 ### LangGraph
 
 ```python
-from coscope.agents import CoScopeGraphBuilder
+from agents import CoScopeGraphBuilder
 
 builder = CoScopeGraphBuilder(pipeline, memory_manager)
 builder.add_retrieve_node("retrieve")

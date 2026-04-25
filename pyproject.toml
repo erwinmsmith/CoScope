@@ -57,7 +57,31 @@ Documentation = "https://github.com/your-org/CoScope#readme"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["coscope*"]
+include = [
+    "agents*",
+    "auth*",
+    "config*",
+    "construction*",
+    "core*",
+    "embedding*",
+    "engine*",
+    "evaluation*",
+    "graph*",
+    "io*",
+    "llm*",
+    "memory*",
+    "prompts*",
+    "retrieval*",
+    "rollout*",
+    "scripts*",
+]
+exclude = [
+    "tests*",
+    "examples*",
+    "docs*",
+    "data*",
+    "logs*",
+]
 
 [tool.ruff]
 line-length = 100

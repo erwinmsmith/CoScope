@@ -4,6 +4,14 @@ Engineering-oriented reference for the current code layout, the gaps between
 it and the README, and a concrete target structure that is friendly to a
 later database integration.
 
+**2026-04-25 flat-layout adoption.** The repository no longer wraps source
+under a top-level `coscope/` package. All subsystems (`engine/`, `memory/`,
+`llm/`, `dataio/`, `prompts/`, `retrieval/`, ...) sit directly at the repo
+root, siblings of `CLAUDE.md` / `README.md` / `pyproject.toml`. The data
+IO layer was renamed `io/` -> `dataio/` to avoid shadowing Python's stdlib
+`io` module. The distribution name on PyPI remains `coscope`; only the
+import paths changed.
+
 This document is **the single source of truth for code organization**. When
 the target layout below is fully applied, `README.md` should be updated to
 match it verbatim.
@@ -13,7 +21,7 @@ match it verbatim.
 ## 1. Current Layout (Apr 2026)
 
 ```
-coscope/
+/
 ├── agents/            # Planner / Solver / Verifier builders
 ├── auth/              # DEPRECATED shim -> memory/crud/auth/
 ├── config/            # YAML + env configuration
@@ -88,7 +96,7 @@ Goal: clean subsystem boundaries, each with a stable integration surface for
 the future database product.
 
 ```
-coscope/
+/
 ├── agents/            # unchanged
 ├── config/            # unchanged
 ├── construction/      # unchanged
@@ -102,7 +110,7 @@ coscope/
 │   ├── synthetic.py
 │   └── split/         # <- from utils/split/
 ├── graph/             # unchanged (templates stay, registry mirrors them)
-├── io/                # <- new top-level "data access" layer
+├── dataio/                # <- new top-level "data access" layer
 │   ├── serializer.py  # <- from utils/output/serializer.py
 │   ├── stats_reporter.py
 │   ├── validator.py
@@ -136,19 +144,18 @@ coscope/
 │   ├── rho_v3.py
 │   └── fallback_synth.py
 ├── scripts/           # unchanged
-└── utils/             # shrinks to true utilities only
-    └── (deprecated; will be emptied)
+(utils/ removed entirely)
 ```
 
 ### Deltas from current layout
 
 | Move | From | To | Risk |
 | ---- | ---- | -- | ---- |
-| Auth | `coscope/auth/` | `coscope/memory/crud/auth/` | **DONE** (shim kept) |
-| Prompts central registry | - | `coscope/prompts/registry.py` | **DONE** |
-| LLM clients | `rollout/{dashscope,template,llm}_client.py` | `coscope/llm/{dashscope,template,base}.py` | **DONE** (shims kept in rollout/) |
-| Dataset loaders | `utils/loaders/` | `io/loaders/` | **DONE** |
-| JSONL serializer | `utils/output/` | `io/` | **DONE** |
+| Auth | `/auth/` | `/memory/crud/auth/` | **DONE** (shim kept) |
+| Prompts central registry | - | `/prompts/registry.py` | **DONE** |
+| LLM clients | `rollout/{dashscope,template,llm}_client.py` | `/llm/{dashscope,template,base}.py` | **DONE** (shims kept in rollout/) |
+| Dataset loaders | `utils/loaders/` | `dataio/loaders/` | **DONE** |
+| JSONL serializer | `utils/output/` | `dataio/` | **DONE** |
 | Subset split | `utils/split/` | `evaluation/split/` | **DONE** |
 | Engine facade | `engine.py` | `engine/__init__.py` | **DONE** |
 | Memory builders | `memory/*_builder.py` | `memory/builders/` | low (cosmetic; deferred) |
@@ -165,12 +172,12 @@ surfaces that need to be touched. Everything else reuses them.
 
 | Concern | Extension point | How to plug |
 | ------- | --------------- | ----------- |
-| Memory storage | `coscope.memory.store.create_memory_store` + `InMemoryMemoryStore` protocol | Implement `MemoryStore` protocol; return it from a factory. |
-| Access control | `coscope.memory.crud.auth.AccessController` | Subclass or replace with a DB-backed controller that reads permissions from the product. |
-| Prompts | `coscope.prompts.registry.set_backend(...)` | Implement `PromptBackend` (get / set / keys / contains) against the DB. |
-| Embeddings | `coscope.embedding.*` | Any class with an `embed_query` / `embed_documents` interface. |
-| LLM | `coscope.llm.LLMClient` (target) | Implement `generate` / `generate_batch`; point `ArtifactRolloutEngine` at it. |
-| Retrieval candidates | `coscope.retrieval.retriever/*` | Plug a vector DB retriever behind the existing protocol. |
+| Memory storage | `memory.store.create_memory_store` + `InMemoryMemoryStore` protocol | Implement `MemoryStore` protocol; return it from a factory. |
+| Access control | `memory.crud.auth.AccessController` | Subclass or replace with a DB-backed controller that reads permissions from the product. |
+| Prompts | `prompts.registry.set_backend(...)` | Implement `PromptBackend` (get / set / keys / contains) against the DB. |
+| Embeddings | `embedding.*` | Any class with an `embed_query` / `embed_documents` interface. |
+| LLM | `llm.LLMClient` (target) | Implement `generate` / `generate_batch`; point `ArtifactRolloutEngine` at it. |
+| Retrieval candidates | `retrieval.retriever/*` | Plug a vector DB retriever behind the existing protocol. |
 
 The `retrieval/` pipeline is explicitly left out: it is the perf-tuning
 surface, not an integration surface, and it already calls into the pluggable
@@ -193,8 +200,8 @@ Two additional constraints emerging from user feedback:
 **Scripts must be thin**
 - `scripts/` contains only argument parsing and top-level orchestration
   calls. No business logic. If a script needs an LLM call, it imports
-  from `coscope.llm`, not from `rollout/`. If it needs serialisation, it
-  imports from `coscope.io`. This was the root cause of the original
+  from `llm`, not from `rollout/`. If it needs serialisation, it
+  imports from `io`. This was the root cause of the original
   cross-layer import (`scripts/generate_query_intent.py` importing from
   `rollout.dashscope_client` directly) — now fixed.
 
