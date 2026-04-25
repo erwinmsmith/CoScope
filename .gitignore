@@ -108,6 +108,7 @@ CLAUDE.md
 # Personal notes / design docs that should not be pushed
 /introduction.md
 /coscope流程.md
+/ARCHITECTURE.md
 /docs/SystemLayer_Rollout_Design_v1.md
 
 # Tests directory is local-only (evaluation shards, scratch)
