@@ -203,6 +203,11 @@ class EpisodeBuilder:
                 "seed": int(seed),
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "reasoning_path_type": self.reasoning_path_type.value,
+                "qa_type": raw_item.get("qa_type"),
+                "task_shared_item_count": len(raw_item.get("task_shared_items", []) or []),
+                "expects_team_shared_evidence": bool(
+                    raw_item.get("task_shared_items", []) or []
+                ),
             },
         )
 

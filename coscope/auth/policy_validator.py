@@ -145,13 +145,18 @@ class PolicyValidator:
         if not answer or len(answer) < 2:
             return
         for entry in ep.memory_entries:
-            layer = (entry.metadata or {}).get("scope_layer", "")
+            meta = entry.metadata or {}
+            layer = meta.get("scope_layer", "")
             if layer not in (
                 "workspace_semantic",
                 "workspace_semantic_global",
                 "workspace_semantic_hop",
                 "task_shared_episodic",
             ):
+                continue
+            # Gold evidence often contains the final answer verbatim by design.
+            # Treat that as expected supervision rather than a leak signal.
+            if meta.get("is_gold_evidence") is True:
                 continue
             if answer in (entry.content or ""):
                 result.add_warning(
@@ -288,7 +293,14 @@ class PolicyValidator:
 
         # Warn if no team-visible (task_shared_episodic) shared_required item
         # exists — means nothing is cross-agent visible at build time.
-        if shared_layers and "task_shared_episodic" not in shared_layers:
+        expects_team_shared = bool(
+            (ep.meta or {}).get("expects_team_shared_evidence", True)
+        )
+        if (
+            expects_team_shared
+            and shared_layers
+            and "task_shared_episodic" not in shared_layers
+        ):
             result.add_warning(
                 f"episode {ep.episode_id}: no shared_required evidence in "
                 f"task_shared_episodic layer (layers seen: {sorted(set(shared_layers))})"
