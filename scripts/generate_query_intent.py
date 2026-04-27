@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
+
 from core.types import (
     AgentRole,
     Episode,
@@ -40,6 +42,8 @@ from rollout import prompt_assembly
 from rollout import fallback_synth
 from dataio.loaders import get_loader
 from dataio.serializer import Serializer
+
+load_dotenv()
 
 
 logger = logging.getLogger(__name__)
