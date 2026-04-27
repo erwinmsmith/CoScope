@@ -17,6 +17,7 @@ Example usage:
 __version__ = "0.1.0"
 
 from coscope.engine import CoScope, create_coscope
+from coscope.construction.episode_builder import EpisodeBuilder
 
 from coscope.core.types import (
     Agent,
@@ -56,6 +57,7 @@ __all__ = [
     # Engine
     "CoScope",
     "create_coscope",
+    "build_episode",
     # Core types
     "Agent",
     "AgentConfig",
@@ -90,3 +92,28 @@ __all__ = [
     "format_synthetic_table",
     "format_variant_table",
 ]
+
+
+def build_episode(
+    raw_item,
+    *,
+    dataset: str,
+    split: str,
+    target_graph_type,
+    seed: int = 42,
+    reasoning_path_type: str = "got",
+):
+    """
+    Convenience wrapper used by examples / smoke tests.
+
+    Keeps a tiny public API for one-off structural validation without forcing
+    callers to instantiate EpisodeBuilder directly.
+    """
+    builder = EpisodeBuilder(reasoning_path_type=reasoning_path_type)
+    return builder.build_episode(
+        raw_item=raw_item,
+        dataset=dataset,
+        split=split,
+        target_graph_type=target_graph_type,
+        seed=seed,
+    )

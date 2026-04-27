@@ -224,7 +224,9 @@ def audit_directory(root: Path) -> int:
     n_episodes = 0
 
     for shard in shards:
-        for line_no, line in enumerate(shard.read_text().splitlines(), start=1):
+        for line_no, line in enumerate(
+            shard.read_text(encoding="utf-8").splitlines(), start=1
+        ):
             if not line.strip():
                 continue
             ep = json.loads(line)

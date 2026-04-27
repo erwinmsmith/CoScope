@@ -265,6 +265,84 @@ summaries = evaluate_synthetic_suite(k=3)
 print(format_synthetic_table(summaries))
 ```
 
+## CoT Manifest Workflow
+
+When comparing `CoT`, `GoT`, and `ToT`, a stricter and safer setup is to fix
+the same underlying `original_id` set first, then let each reasoning structure
+build its own episodes, `rho`, and subset shards from that shared question set.
+
+The unified CLI in `coscope.main` now supports this workflow directly:
+
+- `--write-id-manifest`: export the current `original_id` list to a UTF-8 text file
+- `--id-manifest`: keep only the ids listed in a text / json / jsonl manifest
+- `--strict-id-match`: fail if any manifest id is missing in the current dataset/split
+- `--audit-after-build`: run JSONL schema audit after construction
+
+Recommended `MuSiQue CoT` flow:
+
+1. Export the fixed question set.
+
+```bash
+python -m coscope.main \
+  --datasets musique \
+  --splits dev \
+  --limit 100 \
+  --reasoning-path-type cot \
+  --graph-types LINEAR \
+  --llm template \
+  --embedder none \
+  --processed-dir coscope/data/processed/cot_manifest_seed \
+  --write-id-manifest coscope/data/manifests/musique_dev_ids.txt \
+  --audit-after-build
+```
+
+2. Reuse the same manifest for the standard CoT linear run.
+
+```bash
+python -m coscope.main \
+  --datasets musique \
+  --splits dev \
+  --reasoning-path-type cot \
+  --graph-types LINEAR \
+  --llm template \
+  --embedder none \
+  --processed-dir coscope/data/processed/cot_formal \
+  --id-manifest coscope/data/manifests/musique_dev_ids.txt \
+  --strict-id-match \
+  --audit-after-build
+```
+
+3. Reuse the same manifest for the CoT `S4` safety shard.
+
+```bash
+python -m coscope.main \
+  --datasets musique \
+  --splits dev \
+  --reasoning-path-type cot \
+  --graph-types POLICY_ISOLATED \
+  --llm template \
+  --embedder none \
+  --processed-dir coscope/data/processed/cot_formal \
+  --id-manifest coscope/data/manifests/musique_dev_ids.txt \
+  --strict-id-match \
+  --audit-after-build
+```
+
+Expected outputs:
+
+- `coscope/data/manifests/musique_dev_ids.txt`
+- `coscope/data/processed/cot_formal/cot/musique/dev/s1_linear.jsonl`
+- `coscope/data/processed/cot_formal/cot/musique/dev/s4_policy_isolated.jsonl`
+
+Notes:
+
+- `POLICY_ISOLATED` episodes are written to `s4_*.jsonl`.
+- The manifest stores `original_id`, not `episode_id`.
+- Different reasoning structures may still produce different `rho` and subset
+  distributions; the manifest only fixes the underlying question set.
+- Once the structure is validated with `template`, switch `--llm` to the real
+  backend for formal runs.
+
 ## Agent Framework Integration
 
 ### LangChain

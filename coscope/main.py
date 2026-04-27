@@ -41,12 +41,81 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 from dotenv import load_dotenv
 
 
 logger = logging.getLogger(__name__)
+
+
+def _load_id_manifest(path: str) -> set[str]:
+    """
+    Load a fixed set of original_ids from a text/json/jsonl manifest.
+
+    Supported formats:
+    - .txt: one id per line
+    - .json: ["id1", "id2"] or {"ids": [...]}
+    - .jsonl: one object or string per line; objects may contain `original_id` or `id`
+    """
+    manifest_path = Path(path)
+    suffix = manifest_path.suffix.lower()
+    if suffix == ".txt":
+        ids = {
+            line.strip()
+            for line in manifest_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        }
+        return ids
+    if suffix == ".json":
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if isinstance(payload, list):
+            return {str(item).strip() for item in payload if str(item).strip()}
+        if isinstance(payload, dict):
+            values = payload.get("ids", [])
+            return {str(item).strip() for item in values if str(item).strip()}
+        raise ValueError(f"Unsupported JSON manifest structure: {manifest_path}")
+    if suffix == ".jsonl":
+        ids: set[str] = set()
+        for line in manifest_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            item = json.loads(line)
+            if isinstance(item, str):
+                value = item.strip()
+            elif isinstance(item, dict):
+                value = str(item.get("original_id") or item.get("id") or "").strip()
+            else:
+                value = str(item).strip()
+            if value:
+                ids.add(value)
+        return ids
+    raise ValueError(f"Unsupported manifest format: {manifest_path}")
+
+
+def _filter_raw_items_by_ids(
+    raw_items: Iterable[dict],
+    allowed_ids: set[str],
+) -> tuple[list[dict], list[str]]:
+    filtered: list[dict] = []
+    seen_ids: set[str] = set()
+    for raw in raw_items:
+        oid = str(raw.get("original_id", "")).strip()
+        if oid in allowed_ids:
+            filtered.append(raw)
+            seen_ids.add(oid)
+    missing = sorted(allowed_ids - seen_ids)
+    return filtered, missing
+
+
+def _write_id_manifest(path: str, raw_items: Iterable[dict]) -> Path:
+    manifest_path = Path(path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    ids = [str(raw.get("original_id", "")).strip() for raw in raw_items]
+    ids = [item for item in ids if item]
+    manifest_path.write_text("\n".join(ids) + ("\n" if ids else ""), encoding="utf-8")
+    return manifest_path
 
 
 # ============================================================
@@ -142,6 +211,7 @@ def run_build(args) -> int:
     from coscope.core.types import GraphType, ReasoningPathType
     from coscope.rollout import ArtifactRolloutEngine
     from coscope.rollout.rollout_engine import RolloutConfig
+    from coscope.scripts.audit_jsonl import audit_directory
     from coscope.utils.loaders import get_loader
     from coscope.utils.output import Serializer
     from coscope.utils.split import SubsetAssigner, load_default_thresholds
@@ -200,6 +270,7 @@ def run_build(args) -> int:
     total_ok = total_fail = 0
     total_rhos: Dict[str, List[float]] = defaultdict(list)
     shard_counts: Dict[str, int] = defaultdict(int)
+    audit_roots: set[Path] = set()
 
     t_run_start = time.perf_counter()
 
@@ -207,12 +278,28 @@ def run_build(args) -> int:
         for split in args.splits:
             loader = get_loader(dataset, data_dir=f"{args.data_dir}/{dataset}", split=split)
             raw_items = list(loader.load())
+            if args.id_manifest:
+                allowed_ids = _load_id_manifest(args.id_manifest)
+                raw_items, missing_ids = _filter_raw_items_by_ids(raw_items, allowed_ids)
+                if missing_ids:
+                    msg = (
+                        f"[{dataset}/{split}] {len(missing_ids)} ids from manifest not found "
+                        f"(first 5: {missing_ids[:5]})"
+                    )
+                    if args.strict_id_match:
+                        raise ValueError(msg)
+                    logger.warning(msg)
             if args.limit:
                 raw_items = raw_items[: args.limit]
+            if args.write_id_manifest:
+                manifest_path = _write_id_manifest(args.write_id_manifest, raw_items)
+                logger.info("[%s/%s] wrote id manifest to %s", dataset, split, manifest_path)
             logger.info("[%s/%s] %d raw items", dataset, split, len(raw_items))
 
             out_dir = Path(args.processed_dir) / args.reasoning_path_type / dataset / split
             out_dir.mkdir(parents=True, exist_ok=True)
+            if args.audit_after_build:
+                audit_roots.add(out_dir)
             # Append-only shard handles (one file per subset_graph pair).
             shard_handles: Dict[str, any] = {}
 
@@ -244,7 +331,7 @@ def run_build(args) -> int:
                             print(f"  [{idx+1}/{len(raw_items)}] {oid[:30]:30s} FAIL: {rho_or_reason}")
                             continue
 
-                        subset = ep_dict["rho_subset"].lower()
+                        subset = "s4" if ep_dict.get("s4_eligible") else ep_dict["rho_subset"].lower()
                         shard_key = f"{subset}_{gt.value.lower()}.jsonl"
                         f = _get_handle(shard_key)
                         f.write(json.dumps(ep_dict, ensure_ascii=False))
@@ -270,7 +357,20 @@ def run_build(args) -> int:
     print(f"  shards written:")
     for k, v in sorted(shard_counts.items()):
         print(f"    {k}  ({v})")
-    return 0 if total_fail == 0 else 2
+
+    audit_failures = 0
+    if args.audit_after_build:
+        for root in sorted(audit_roots):
+            print(f"\n=== AUDIT {root} " + "=" * 20)
+            rc = audit_directory(root)
+            if rc != 0:
+                audit_failures += 1
+
+    if total_fail == 0 and audit_failures == 0:
+        return 0
+    if total_fail != 0:
+        return 2
+    return 3
 
 
 # ============================================================
@@ -290,6 +390,12 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
                    default=["LINEAR", "FORK", "FORK_MERGE", "INDEPENDENT", "POLICY_ISOLATED"])
     p.add_argument("--limit", type=int, default=None,
                    help="Cap on raw items per split.")
+    p.add_argument("--id-manifest", default=None,
+                   help="Optional text/json/jsonl file listing original_ids to keep.")
+    p.add_argument("--strict-id-match", action="store_true",
+                   help="Fail if any id in --id-manifest is missing from the current dataset/split.")
+    p.add_argument("--write-id-manifest", default=None,
+                   help="Write the current post-filter original_id list to a UTF-8 .txt file.")
 
     # paths
     p.add_argument("--data-dir", default="coscope/data/raw")
@@ -315,6 +421,8 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
     p.add_argument("--test", action="store_true",
                    help="Smoke-test mode: route output to tests/tmp/ instead of "
                         "coscope/data/processed/. Use for template LLM / dev runs.")
+    p.add_argument("--audit-after-build", action="store_true",
+                   help="Run JSONL schema audit on each output split directory after build.")
 
     args = p.parse_args(argv)
     if args.test:
