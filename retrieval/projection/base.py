@@ -26,6 +26,10 @@ class ProjectionConfig:
     use_mask: bool = True
     mask_sparsity: float = 0.5
     initializer: str = "xavier"
+    # Seed for the per-instance RNG used to initialize W and the sparse mask.
+    # Set to an int for fully deterministic projection across runs (default).
+    # Set to None to fall back to numpy's global state for legacy behavior.
+    seed: Optional[int] = 0
 
 
 @dataclass
@@ -59,6 +63,10 @@ class SharedProjectionModule:
         self._W_final: Optional[np.ndarray] = None
         self._W_masked: Optional[np.ndarray] = None
         self._singular_values: Optional[np.ndarray] = None
+        # Per-instance RNG. When config.seed is None we still build a
+        # Generator so the rest of the code path is uniform; it just
+        # picks a fresh seed from os entropy in that case.
+        self._rng: np.random.Generator = np.random.default_rng(self.config.seed)
 
     def fit(
         self,
@@ -95,7 +103,7 @@ class SharedProjectionModule:
             U, S, VT = np.linalg.svd(W_masked, full_matrices=False)
         except np.linalg.LinAlgError:
             # Fallback for degenerate case
-            W_masked = W_masked + np.random.randn(*W_masked.shape).astype(np.float32) * 1e-6
+            W_masked = W_masked + self._rng.standard_normal(W_masked.shape).astype(np.float32) * 1e-6
             U, S, VT = np.linalg.svd(W_masked, full_matrices=False)
 
         # Extract shared subspace
@@ -176,19 +184,19 @@ class SharedProjectionModule:
 
         if init_type == "xavier":
             limit = np.sqrt(6.0 / (k + l))
-            W = np.random.uniform(-limit, limit, (l, k)).astype(np.float32)
+            W = self._rng.uniform(-limit, limit, (l, k)).astype(np.float32)
         elif init_type == "random":
-            W = np.random.randn(l, k).astype(np.float32)
+            W = self._rng.standard_normal((l, k)).astype(np.float32)
             W = W / (np.sum(W**2, axis=1, keepdims=True) ** 0.5 + 1e-8)
         else:
-            W = np.random.randn(l, k).astype(np.float32) * 0.01
+            W = self._rng.standard_normal((l, k)).astype(np.float32) * 0.01
 
         return W
 
     def _create_sparse_mask(self, l: int, k: int) -> np.ndarray:
         """Create structured sparse mask."""
         sparsity = self.config.mask_sparsity
-        mask = np.random.rand(l, k)
+        mask = self._rng.random((l, k))
         return (mask > sparsity).astype(np.float32)
 
     @property

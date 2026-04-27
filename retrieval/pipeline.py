@@ -9,6 +9,7 @@ fuse the final evidence set per agent.
 
 from __future__ import annotations
 
+import hashlib
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -677,7 +678,7 @@ class RetrievalPipeline:
             )
             shareable.append(
                 RetrievalBucket(
-                    bucket_id=f"scope_only_{abs(hash(scope_id)) % 100000:05d}",
+                    bucket_id=f"scope_only_{int(hashlib.md5(scope_id.encode()).hexdigest()[:8], 16) % 100000:05d}",
                     scope_bucket_key=key,
                     requests=grouped,
                     shared_scopes=[scope_id],

@@ -110,7 +110,7 @@ class QueryMatrixBuilder:
         key = ScopeBucketKey(
             primary_scope=primary_scope,
             memory_types=tuple(sorted(t.value for t in requests[0].memory_types)),
-            policy_hash=hash(str(requests[0].policy)),
+            policy_hash=requests[0].policy.policy_hash(),
         )
 
         return QueryMatrix(

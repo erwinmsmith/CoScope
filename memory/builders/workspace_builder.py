@@ -15,6 +15,7 @@ paragraphs so that downstream recall / coverage metrics can bucket by hop.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict, List, Optional
 
 from core.types import (
@@ -76,7 +77,7 @@ class WorkspaceBuilder:
         hop_index: Optional[int],
         is_gold: bool,
     ) -> MemoryEntry:
-        paragraph_id = str(para.get("paragraph_id", f"para_{abs(hash(para.get('text', '')))%100000:05d}"))
+        paragraph_id = str(para.get("paragraph_id", f"para_{int(hashlib.md5(str(para.get('text', '')).encode()).hexdigest()[:8], 16) % 100000:05d}"))
         text = str(para.get("text", "") or "")
         return MemoryEntry(
             scope_id=scope_id,

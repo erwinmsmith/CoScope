@@ -138,7 +138,7 @@ class OverlapAwareRouter(ScopeRouter):
 
                 visited.add(node)
                 component.append(node)
-                queue.extend(graph[node] - visited)
+                queue.extend(sorted(graph[node] - visited))
 
             if component:
                 components.append(component)

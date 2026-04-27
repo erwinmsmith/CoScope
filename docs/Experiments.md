@@ -14,6 +14,7 @@ from the JSON sidecars under `data/processed/got/musique/` (gitignored).
 | Episodes built | **1000** (5 graph types × 200) |
 | Reasoning path | **GoT** (Graph-of-Thought) |
 | Embedder | deterministic random hash, dim=256 (offline, reproducible) |
+| Determinism | runs with `PYTHONHASHSEED=0`; ~±0.5pt residual noise on S4 from top-k tie-breaking near the cutoff |
 | Step-2 LLM (a8 only) | qwen-plus via DashScope (3800 calls, 0 errors) |
 | k (recall / mrr cutoff) | 10 |
 | Schema version | 1.0.0 |
@@ -63,8 +64,8 @@ from the JSON sidecars under `data/processed/got/musique/` (gitignored).
 
 ## 3. Main results — recall@10 by graph_type
 
-Source: `eval_v8_with_a7.json` (v8, raw query) and `eval_v9_a8.json`
-(v9, with query rewrite).
+Source: `eval_v8.json` (v8, raw query) and `eval_v9.json` (v9, with query
+rewrite). Both produced under `PYTHONHASHSEED=0` against HEAD.
 
 ### v8 (raw query, 11 variants × 1000 episodes)
 
@@ -75,10 +76,10 @@ Source: `eval_v8_with_a7.json` (v8, raw query) and `eval_v9_a8.json`
 | a3 | 0.4335 | 0.4389 | 0.4180 | 0.4217 | 0.4385 |
 | **a4** | 0.9983 | 0.9983 | **0.9994** | **0.9990** | **0.8425** |
 | a4_norerank | 0.4335 | 0.4389 | 0.4180 | 0.4217 | 0.4385 |
-| a4_nofb | 0.9983 | 0.9983 | 0.9994 | 0.9990 | 0.8394 |
-| a5 | 0.9992 | 0.9992 | 0.9981 | 0.9985 | 0.8031 |
-| a5_noproj | 0.9992 | 0.9992 | 0.9981 | 0.9985 | 0.8075 |
-| a5_norerank | 0.4506 | 0.4403 | 0.4326 | 0.4095 | 0.4505 |
+| a4_nofb | 0.9983 | 0.9983 | 0.9994 | 0.9990 | 0.7975 |
+| a5 | 0.9992 | 0.9992 | 0.9981 | 0.9985 | 0.7662 |
+| a5_noproj | 0.9992 | 0.9992 | 0.9981 | 0.9985 | 0.8081 |
+| a5_norerank | 0.4506 | 0.4403 | 0.4334 | 0.4102 | 0.4505 |
 | a6 | 0.9992 | 0.9992 | 0.9981 | 0.9985 | 0.7494 |
 | a7 | 0.9992 | 0.9992 | 0.9981 | 0.9985 | 0.7494 |
 
@@ -89,7 +90,7 @@ Source: `eval_v8_with_a7.json` (v8, raw query) and `eval_v9_a8.json`
 | a4 | 0.9983 | 0.9983 | 0.9994 | 0.9990 | **0.8438** |
 | a6 | 0.9992 | 0.9992 | 0.9981 | 0.9985 | 0.7494 |
 | a7 | 0.9992 | 0.9992 | 0.9981 | 0.9985 | 0.7494 |
-| a8 | 0.9958 | 0.9975 | 0.9967 | 0.9956 | 0.7475 |
+| a8 | 0.9958 | 0.9975 | 0.9967 | 0.9958 | 0.7475 |
 
 ---
 
@@ -99,26 +100,26 @@ Source: `eval_v8_with_a7.json` (v8, raw query) and `eval_v9_a8.json`
 
 | variant | LINEAR | FORK | FORK_MERGE | INDEPENDENT | POLICY_ISOLATED |
 |---|---:|---:|---:|---:|---:|
-| a1 | 0.8501 | 0.8654 | 0.8114 | 0.7749 | 0.6376 |
-| a2 | 0.2474 | 0.2600 | 0.2548 | 0.2383 | 0.1231 |
-| a3 | 0.2764 | 0.2817 | 0.2951 | 0.2796 | 0.2644 |
-| **a4** | 0.8568 | 0.8583 | 0.8113 | 0.7722 | 0.6716 |
-| a4_norerank | 0.2764 | 0.2817 | 0.2951 | 0.2796 | 0.2644 |
-| a4_nofb | 0.8568 | 0.8583 | 0.8113 | 0.7722 | 0.6712 |
-| a5 | 0.8501 | 0.8654 | 0.8114 | 0.7744 | 0.6626 |
-| a5_noproj | 0.8501 | 0.8654 | 0.8114 | 0.7744 | 0.6634 |
-| a5_norerank | 0.2992 | 0.2823 | 0.2920 | 0.2912 | 0.2909 |
-| a6 | 0.8501 | 0.8654 | 0.8114 | 0.7744 | 0.6376 |
-| a7 | 0.8501 | 0.8654 | 0.8114 | 0.7744 | 0.6376 |
+| a1 | 0.8501 | 0.8654 | 0.8114 | 0.7744 | 0.6376 |
+| a2 | 0.2474 | 0.2600 | 0.2548 | 0.2377 | 0.1231 |
+| a3 | 0.2764 | 0.2817 | 0.2951 | 0.2789 | 0.2644 |
+| **a4** | 0.8568 | 0.8583 | 0.8113 | 0.7707 | 0.6715 |
+| a4_norerank | 0.2764 | 0.2817 | 0.2951 | 0.2789 | 0.2644 |
+| a4_nofb | 0.8568 | 0.8583 | 0.8113 | 0.7707 | 0.6603 |
+| a5 | 0.8501 | 0.8654 | 0.8114 | 0.7749 | 0.6460 |
+| a5_noproj | 0.8501 | 0.8654 | 0.8114 | 0.7749 | 0.6630 |
+| a5_norerank | 0.2992 | 0.2823 | 0.2920 | 0.2917 | 0.2909 |
+| a6 | 0.8501 | 0.8654 | 0.8114 | 0.7749 | 0.6376 |
+| a7 | 0.8501 | 0.8654 | 0.8114 | 0.7749 | 0.6376 |
 
 ### v9 (with query rewrite)
 
 | variant | LINEAR | FORK | FORK_MERGE | INDEPENDENT | POLICY_ISOLATED |
 |---|---:|---:|---:|---:|---:|
 | a4 | 0.8568 | 0.8583 | 0.8113 | 0.7707 | 0.6717 |
-| a6 | 0.8501 | 0.8654 | 0.8114 | 0.7744 | 0.6376 |
-| a7 | 0.8501 | 0.8654 | 0.8114 | 0.7744 | 0.6376 |
-| **a8** | **0.8606** | **0.8721** | **0.8427** | **0.8002** | 0.6541 |
+| a6 | 0.8501 | 0.8654 | 0.8114 | 0.7749 | 0.6376 |
+| a7 | 0.8501 | 0.8654 | 0.8114 | 0.7749 | 0.6376 |
+| **a8** | **0.8606** | **0.8837** | **0.8324** | **0.7912** | 0.6547 |
 
 ---
 
@@ -172,9 +173,9 @@ verifier and fallback filter out the actual content, leaving
 |---|---:|---:|---:|---:|---:|---:|
 | LINEAR | 0.998 | 0.434 | **−0.565** | 0.999 | 0.451 | **−0.548** |
 | FORK | 0.998 | 0.439 | **−0.560** | 0.999 | 0.440 | **−0.559** |
-| FORK_MERGE | 0.999 | 0.418 | **−0.581** | 0.998 | 0.433 | **−0.566** |
-| INDEPENDENT | 0.999 | 0.422 | **−0.577** | 0.999 | 0.410 | **−0.589** |
-| POLICY_ISOLATED | 0.843 | 0.439 | **−0.404** | 0.803 | 0.451 | **−0.353** |
+| FORK_MERGE | 0.999 | 0.418 | **−0.581** | 0.998 | 0.433 | **−0.565** |
+| INDEPENDENT | 0.999 | 0.422 | **−0.577** | 0.999 | 0.410 | **−0.588** |
+| POLICY_ISOLATED | 0.843 | 0.439 | **−0.404** | 0.766 | 0.451 | **−0.316** |
 
 Rerank is the single most important component — recall collapses without
 it.
@@ -187,9 +188,10 @@ it.
 | FORK | 0.9983 | 0.9983 | 0.000 |
 | FORK_MERGE | 0.9994 | 0.9994 | 0.000 |
 | INDEPENDENT | 0.9990 | 0.9990 | 0.000 |
-| POLICY_ISOLATED | 0.8425 | 0.8394 | +0.003 |
+| POLICY_ISOLATED | 0.8425 | 0.7975 | **+0.045** |
 
-Fallback contributes a small but consistent lift on POLICY_ISOLATED.
+Private fallback is a meaningful component on POLICY_ISOLATED — removing
+it drops recall by 4.5 percentage points.
 
 ### Effect of SVD projection on a5
 
@@ -199,24 +201,26 @@ Fallback contributes a small but consistent lift on POLICY_ISOLATED.
 | FORK | 0.9992 | 0.9992 | 0.000 |
 | FORK_MERGE | 0.9981 | 0.9981 | 0.000 |
 | INDEPENDENT | 0.9985 | 0.9985 | 0.000 |
-| POLICY_ISOLATED | 0.8031 | 0.8075 | −0.004 |
+| POLICY_ISOLATED | 0.7662 | 0.8081 | **−0.042** |
 
-SVD projection is neutral on the synthetic embedder; revisit on a real
-embedding model (sentence-transformers / OpenAI).
+With the deterministic projection seed, removing SVD actually *helps*
+recall on POLICY_ISOLATED. Worth revisiting on a real embedding model
+(sentence-transformers / OpenAI) where the projection is fitted on
+meaningful query-vector co-variance.
 
 ### Effect of Step-2 query rewrite (a7 → a8)
 
 | graph_type | recall (a7) | recall (a8) | Δ recall | mrr (a7) | mrr (a8) | **Δ mrr** |
 |---|---:|---:|---:|---:|---:|---:|
 | LINEAR | 0.9992 | 0.9958 | −0.003 | 0.8501 | 0.8606 | **+0.010** |
-| FORK | 0.9992 | 0.9975 | −0.002 | 0.8654 | 0.8721 | **+0.007** |
-| FORK_MERGE | 0.9981 | 0.9967 | −0.001 | 0.8114 | 0.8427 | **+0.031** |
-| INDEPENDENT | 0.9985 | 0.9956 | −0.003 | 0.7744 | 0.8002 | **+0.026** |
-| POLICY_ISOLATED | 0.7494 | 0.7475 | −0.002 | 0.6376 | 0.6541 | **+0.017** |
+| FORK | 0.9992 | 0.9975 | −0.002 | 0.8654 | 0.8837 | **+0.018** |
+| FORK_MERGE | 0.9981 | 0.9967 | −0.001 | 0.8114 | 0.8324 | **+0.021** |
+| INDEPENDENT | 0.9985 | 0.9958 | −0.003 | 0.7749 | 0.7912 | **+0.016** |
+| POLICY_ISOLATED | 0.7494 | 0.7475 | −0.002 | 0.6376 | 0.6547 | **+0.017** |
 
 LLM-rewritten queries do not raise recall (already saturated) but lift
-mrr@10 across all graph types — strongest on multi-branch FORK_MERGE
-(+0.031) and INDEPENDENT (+0.026), where rewriting disambiguates parallel
+mrr@10 across all graph types — strongest on multi-branch FORK
+(+0.018) and FORK_MERGE (+0.021), where rewriting disambiguates parallel
 sub-questions.
 
 ---
@@ -228,16 +232,21 @@ sub-questions.
    the no-share baseline a1 (**+9.4 pt absolute**).
 
 2. **a8 (a6 + LLM query rewrite) is the mrr winner.** mrr@10 lifts
-   uniformly by **+0.7 to +3.1 pt**, largest on multi-branch graphs.
+   uniformly by **+1.0 to +2.1 pt**, largest on multi-branch graphs
+   (FORK +1.8 pt, FORK_MERGE +2.1 pt).
 
 3. **Cross-encoder rerank is critical**: removing it collapses recall by
-   35-58 pt across all subsets.
+   32-58 pt across all subsets.
 
-4. **Privacy is preserved end-to-end** for every variant that keeps the
+4. **Private fallback contributes 4.5 pt of recall on POLICY_ISOLATED**
+   (a4 = 0.843 vs a4_nofb = 0.798). On non-conflict graph types it is
+   neutral.
+
+5. **Privacy is preserved end-to-end** for every variant that keeps the
    verifier (`a3`, `a4*`, `a5*`, `a6`, `a7`, `a8`):
    `content_FMR (S4) = 0`. Only `a2` (no verifier) leaks content.
 
-5. **First-stage savings of 67-80 %** for the shared-retrieval family
+6. **First-stage savings of 67-80 %** for the shared-retrieval family
    (a2-a5) at no cost to recall — the central efficiency claim of the
    framework.
 
@@ -249,17 +258,17 @@ Re-run on existing shards:
 
 ```bash
 # v8 (no Step-2 rewrite)
-python -m scripts.eval_jsonl \
+PYTHONHASHSEED=0 python -m scripts.eval_jsonl \
   --shards 'data/processed/got/musique/test/*.jsonl' \
   --variants a1 a2 a3 a4 a4_nofb a4_norerank a5 a5_noproj a5_norerank a6 a7 \
   --k 10 \
-  --output data/processed/got/musique/test/eval_v8_with_a7.json
+  --output data/processed/got/musique/test/eval_v8.json
 
 # v9 (with Step-2 query rewrite — assumes test_qi/ shards already patched)
-python -m scripts.eval_jsonl \
+PYTHONHASHSEED=0 python -m scripts.eval_jsonl \
   --shards 'data/processed/got/musique/test_qi/*.jsonl' \
   --variants a4 a6 a7 a8 --k 10 \
-  --output data/processed/got/musique/test_qi/eval_v9_a8.json
+  --output data/processed/got/musique/test_qi/eval_v9.json
 ```
 
 To regenerate Step-2 query_intent (3800 LLM calls, ~90 min on qwen-plus):

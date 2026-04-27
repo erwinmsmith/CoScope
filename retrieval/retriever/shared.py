@@ -82,7 +82,7 @@ class SharedCandidateRetriever(CandidateRetriever):
 
         # Get top-k per query
         selected_scores = []
-        selected_indices = np.argsort(-A, axis=1)[:, :k]
+        selected_indices = np.argsort(-A, axis=1, kind="stable")[:, :k]
 
         for i, indices in enumerate(selected_indices):
             for idx, score in zip(indices, A[i, indices]):

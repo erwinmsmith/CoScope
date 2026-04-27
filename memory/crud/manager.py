@@ -6,6 +6,7 @@ Provides a high-level interface for memory operations.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -114,7 +115,7 @@ class MemoryCRUD:
                 pass
 
         entry = MemoryEntry(
-            memory_id=memory_id or f"mem_{len(self.store._entries)}_{hash(content) % 100000:05d}",
+            memory_id=memory_id or f"mem_{len(self.store._entries)}_{int(hashlib.md5(content.encode()).hexdigest()[:8], 16) % 100000:05d}",
             scope_id=scope_id,
             memory_type=memory_type,
             content=content,

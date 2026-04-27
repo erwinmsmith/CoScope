@@ -6,6 +6,7 @@ Provides memory storage backends and the memory management system.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -284,7 +285,7 @@ class MemoryManager:
                 pass
 
         entry = MemoryEntry(
-            memory_id=f"mem_{len(self.store._entries)}_{hash(content) % 100000:05d}",
+            memory_id=f"mem_{len(self.store._entries)}_{int(hashlib.md5(content.encode()).hexdigest()[:8], 16) % 100000:05d}",
             scope_id=scope_id,
             memory_type=memory_type,
             content=content,
