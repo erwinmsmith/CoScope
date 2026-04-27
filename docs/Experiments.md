@@ -1,7 +1,7 @@
 # CoScope Experiments — MuSiQue / GoT / test split
 
 Living document. Updated as new evaluations are run. Numbers are reproducible
-from the JSON sidecars under `tests/tmp/processed/got/musique/` (gitignored).
+from the JSON sidecars under `data/processed/got/musique/` (gitignored).
 
 ---
 
@@ -250,26 +250,26 @@ Re-run on existing shards:
 ```bash
 # v8 (no Step-2 rewrite)
 python -m scripts.eval_jsonl \
-  --shards 'tests/tmp/processed/got/musique/test/*.jsonl' \
+  --shards 'data/processed/got/musique/test/*.jsonl' \
   --variants a1 a2 a3 a4 a4_nofb a4_norerank a5 a5_noproj a5_norerank a6 a7 \
   --k 10 \
-  --output tests/tmp/processed/got/musique/test/eval_v8_with_a7.json
+  --output data/processed/got/musique/test/eval_v8_with_a7.json
 
 # v9 (with Step-2 query rewrite — assumes test_qi/ shards already patched)
 python -m scripts.eval_jsonl \
-  --shards 'tests/tmp/processed/got/musique/test_qi/*.jsonl' \
+  --shards 'data/processed/got/musique/test_qi/*.jsonl' \
   --variants a4 a6 a7 a8 --k 10 \
-  --output tests/tmp/processed/got/musique/test_qi/eval_v9_a8.json
+  --output data/processed/got/musique/test_qi/eval_v9_a8.json
 ```
 
 To regenerate Step-2 query_intent (3800 LLM calls, ~90 min on qwen-plus):
 
 ```bash
 python -m scripts.generate_query_intent \
-  --shards 'tests/tmp/processed/got/musique/test/*.jsonl' \
+  --shards 'data/processed/got/musique/test/*.jsonl' \
   --dataset musique --split test \
   --llm dashscope --model qwen-plus \
-  --output-dir tests/tmp/processed/got/musique/test_qi
+  --output-dir data/processed/got/musique/test_qi
 ```
 
 ---
