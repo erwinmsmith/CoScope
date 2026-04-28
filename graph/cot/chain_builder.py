@@ -14,7 +14,7 @@ pre-conditions), the entry point is already separated out.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from core.types import GoTGraph, GraphType
 from graph.got.graph_builder import GraphBuilder
@@ -32,8 +32,19 @@ class ChainBuilder:
         self.seed = seed
         self._delegate = GraphBuilder(seed=seed)
 
-    def build(self, raw_item: Dict[str, Any], dataset: str, seed: int = 42) -> GoTGraph:
-        """Build a linear chain (LINEAR GoT template) for this raw_item."""
+    def build(
+        self,
+        raw_item: Dict[str, Any],
+        dataset: str,
+        target_graph_type: Any = None,
+        seed: int = 42,
+    ) -> GoTGraph:
+        """Build a linear chain (LINEAR GoT template) for this raw_item.
+
+        ``target_graph_type`` is accepted for signature compatibility with
+        ``GraphBuilder`` (so EpisodeBuilder can dispatch uniformly), but it is
+        ignored: CoT is structurally pinned to ``GraphType.LINEAR``.
+        """
         return self._delegate.build(
             raw_item=raw_item,
             dataset=dataset,

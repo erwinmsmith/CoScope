@@ -21,6 +21,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
+
 from core.types import Agent, MemoryEntry, RetrievalRequest
 from agents import (
     PlannerAgentBuilder,
@@ -38,6 +39,8 @@ from core.types import (
 )
 from graph.got.graph_builder import GraphBuilder
 from graph.got.rho_calculator import RhoCalculator
+from graph.cot.chain_builder import ChainBuilder
+from graph.tot.tree_builder import TreeBuilder
 from memory.builders.private_builder import PrivateBuilder
 from memory.builders.restricted_builder import RestrictedBuilder
 from memory.builders.task_shared_builder import TaskSharedBuilder
@@ -56,12 +59,30 @@ def _slug(s: str) -> str:
 
 
 class EpisodeBuilder:
-    """Build a single Episode from a raw_item + target graph_type."""
+    """Build a single Episode from a raw_item + target graph_type.
+
+    ``reasoning_path_type`` selects the structural family of the produced
+    episode (GoT graph / CoT chain / ToT tree). When no explicit
+    ``graph_builder`` is injected, a default one is picked according to
+    ``reasoning_path_type`` (``GraphBuilder`` for GoT, ``ChainBuilder`` for
+    CoT pinned to LINEAR, ``TreeBuilder`` for ToT pinned to FORK). All three
+    builders share the signature ``build(raw_item, dataset, target_graph_type,
+    seed)`` so dispatch in :meth:`build_episode` is uniform.
+
+    Memory-id strategy (cross-rpt comparability)
+    -------------------------------------------
+    Workspace and task-shared memory entries hash only on (dataset,
+    paragraph_id) / (dataset, original_id, hop_index) respectively, so a same
+    raw_item rebuilt as GoT vs CoT vs ToT yields *the same* memory_id for
+    those layers. Private and restricted entries are episode-scoped and so
+    differ across reasoning paths (which is the intended behavior).
+    """
 
     def __init__(
         self,
         *,
-        graph_builder: Optional[GraphBuilder] = None,
+        reasoning_path_type: Union[str, ReasoningPathType] = ReasoningPathType.GOT,
+        graph_builder: Optional[Any] = None,
         workspace_builder: Optional[WorkspaceBuilder] = None,
         task_shared_builder: Optional[TaskSharedBuilder] = None,
         private_builder: Optional[PrivateBuilder] = None,
@@ -73,7 +94,12 @@ class EpisodeBuilder:
         solver_builder: Optional[SolverAgentBuilder] = None,
         verifier_builder: Optional[VerifierAgentBuilder] = None,
     ):
-        self.graph_builder = graph_builder or GraphBuilder()
+        self.reasoning_path_type = self._normalize_reasoning_path_type(
+            reasoning_path_type
+        )
+        self.graph_builder = graph_builder or self._default_graph_builder(
+            self.reasoning_path_type
+        )
         self.workspace_builder = workspace_builder or WorkspaceBuilder()
         self.task_shared_builder = task_shared_builder or TaskSharedBuilder()
         self.private_builder = private_builder or PrivateBuilder()
@@ -107,7 +133,9 @@ class EpisodeBuilder:
 
         graph_type = got_graph.graph_type
         original_id = str(raw_item.get("original_id", ""))
-        episode_id = self._compose_episode_id(dataset, split, original_id, graph_type)
+        episode_id = self._compose_episode_id(
+            dataset, split, original_id, self.reasoning_path_type, graph_type
+        )
 
         # --- Memory store construction -------------------------------------
         workspace_entries = self.workspace_builder.build(raw_item, dataset, episode_id)
@@ -169,7 +197,7 @@ class EpisodeBuilder:
             original_id=original_id,
             hop_count=int(raw_item.get("hop_count", 0)),
             graph_type=graph_type,
-            reasoning_path_type=ReasoningPathType.GOT,
+            reasoning_path_type=self.reasoning_path_type,
             rho=rho,
             rho_subset=assignment.rho_subset,
             policy_conflict=assignment.policy_conflict,
@@ -185,7 +213,7 @@ class EpisodeBuilder:
                 "schema_version": "1.0.0",
                 "seed": int(seed),
                 "created_at": datetime.now(timezone.utc).isoformat(),
-                "reasoning_path_type": ReasoningPathType.GOT.value,
+                "reasoning_path_type": self.reasoning_path_type.value,
             },
         )
 
@@ -206,9 +234,44 @@ class EpisodeBuilder:
 
     @staticmethod
     def _compose_episode_id(
-        dataset: str, split: str, original_id: str, graph_type: GraphType
+        dataset: str,
+        split: str,
+        original_id: str,
+        reasoning_path_type: ReasoningPathType,
+        graph_type: GraphType,
     ) -> str:
-        return f"{_slug(dataset)}_{_slug(split)}_{_slug(original_id)}_{graph_type.value}"
+        return (
+            f"{_slug(dataset)}_{_slug(split)}_{_slug(original_id)}_"
+            f"{_slug(reasoning_path_type.value.lower())}_{graph_type.value}"
+        )
+
+    @staticmethod
+    def _normalize_reasoning_path_type(
+        value: Union[str, ReasoningPathType]
+    ) -> ReasoningPathType:
+        if isinstance(value, ReasoningPathType):
+            return value
+        raw = str(value or "").strip().lower()
+        mapping = {
+            "got": ReasoningPathType.GOT,
+            "graph-of-thought": ReasoningPathType.GOT,
+            "graph_of_thought": ReasoningPathType.GOT,
+            "cot": ReasoningPathType.COT,
+            "chain-of-thought": ReasoningPathType.COT,
+            "chain_of_thought": ReasoningPathType.COT,
+            "tot": ReasoningPathType.TOT,
+            "tree-of-thought": ReasoningPathType.TOT,
+            "tree_of_thought": ReasoningPathType.TOT,
+        }
+        return mapping.get(raw, ReasoningPathType.GOT)
+
+    @staticmethod
+    def _default_graph_builder(reasoning_path_type: ReasoningPathType):
+        if reasoning_path_type == ReasoningPathType.COT:
+            return ChainBuilder()
+        if reasoning_path_type == ReasoningPathType.TOT:
+            return TreeBuilder()
+        return GraphBuilder()
 
     @staticmethod
     def _build_ground_truth(

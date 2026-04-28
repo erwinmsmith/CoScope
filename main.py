@@ -107,7 +107,7 @@ def _process_one(
     trace = rollout_engine.run(
         raw_item=raw_item, got_graph=ep.got_graph,
         dataset=dataset, episode_id=ep.episode_id,
-        reasoning_path_type=ReasoningPathType.GOT,
+        reasoning_path_type=ep.reasoning_path_type,
     )
     tr_result = validate_trace(trace, ep.got_graph)
     if not tr_result.passed:
@@ -151,7 +151,9 @@ def run_build(args) -> int:
     logger.info("Backend: llm=%s embedder=%s seed=%d", llm.name,
                 embedder.name if embedder else "none", args.seed)
 
-    episode_builder = EpisodeBuilder()
+    episode_builder = EpisodeBuilder(
+        reasoning_path_type=args.reasoning_path_type,
+    )
     engine = ArtifactRolloutEngine(
         llm,
         config=RolloutConfig(seed=args.seed, temperature=args.temperature,

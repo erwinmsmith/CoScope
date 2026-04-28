@@ -24,6 +24,7 @@ If the file is missing or there is no matching entry, an empty list is returned.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -105,10 +106,23 @@ class RestrictedBuilder:
             "episode_id": episode_id,
         }
         meta.update(meta_extra)
+        # Deterministic memory_id: restricted placeholders are episode-scoped
+        # (different verifier runs for different episodes) so include episode_id.
+        # Use source_paragraph_id when available; otherwise fall back to the
+        # content hash so two distinct entries within one episode don't collide.
+        content_str = str(record.get("content", "") or "")
+        rs_basis = (
+            meta.get("source_paragraph_id")
+            or record.get("source")
+            or hashlib.md5(content_str.encode()).hexdigest()[:8]
+        )
+        rs_key = f"rs|{episode_id}|{rs_basis}"
+        memory_id = f"mem_rs_{hashlib.md5(rs_key.encode()).hexdigest()[:12]}"
         return MemoryEntry(
+            memory_id=memory_id,
             scope_id=scope_id,
             memory_type=MemoryType.EPISODIC,
-            content=str(record.get("content", "") or ""),
+            content=content_str,
             visibility=[VisibilityLevel.RESTRICTED],
             confidence=float(record.get("confidence", 0.0)),
             provenance=Provenance(

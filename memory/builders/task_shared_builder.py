@@ -9,6 +9,7 @@ datasets pre-fill the gold step conclusion.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict, List
 
 from core.types import (
@@ -52,8 +53,20 @@ class TaskSharedBuilder:
                 continue
             source_paragraph_id = str(item.get("source_paragraph_id", f"hop_{hop}"))
             writer_agent_id = f"{episode_id}_{node.node_id}"
+            # Deterministic memory_id keyed on (dataset, original_id, hop,
+            # source_node_id). The node_id is included because in FORK / FORK_MERGE
+            # graphs multiple solver branches at the same hop each get their own
+            # task_shared entry with identical oracle text (one per branch); they
+            # must remain distinguishable. Cross-rpt comparability is preserved
+            # whenever the underlying graph_type matches (e.g. GoT-LINEAR vs CoT,
+            # GoT-FORK vs ToT) because both pipelines reuse the same GraphBuilder
+            # and therefore produce identical node_ids.
+            original_id = str(raw_item.get("original_id", ""))
+            ts_key = f"ts|{dataset}|{original_id}|{hop}|{node.node_id}"
+            memory_id = f"mem_ts_{hashlib.md5(ts_key.encode()).hexdigest()[:12]}"
             entries.append(
                 MemoryEntry(
+                    memory_id=memory_id,
                     scope_id=scope_id,
                     memory_type=MemoryType.EPISODIC,
                     content=text,

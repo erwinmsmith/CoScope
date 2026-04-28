@@ -39,12 +39,14 @@ class DatasetPipeline:
         data_dir: Union[str, Path] = "data/raw",
         reasoning_path_type: str = "got",
     ):
-        self.episode_builder = episode_builder or EpisodeBuilder()
+        self.reasoning_path_type = reasoning_path_type.lower()
+        self.episode_builder = episode_builder or EpisodeBuilder(
+            reasoning_path_type=self.reasoning_path_type,
+        )
         self.serializer = serializer or Serializer()
         self.stats_reporter = stats_reporter or StatsReporter()
         self.processed_dir = Path(processed_dir)
         self.data_dir = Path(data_dir)
-        self.reasoning_path_type = reasoning_path_type.lower()
 
     @property
     def reasoning_root(self) -> Path:

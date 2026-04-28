@@ -9,6 +9,7 @@ writers have a scope to target.
 
 from __future__ import annotations
 
+import hashlib
 from typing import List
 
 from core.types import (
@@ -29,8 +30,14 @@ class PrivateBuilder:
         for node in got_graph.nodes:
             agent_id = f"{episode_id}_{node.node_id}"
             scope_id = agent_private(episode_id, node.node_id)
+            # Deterministic memory_id: private placeholders are tied to one
+            # specific (episode, node), so include episode_id (which carries
+            # reasoning_path_type) to keep distinct entries across rpts.
+            pr_key = f"pr|{episode_id}|{node.node_id}"
+            memory_id = f"mem_pr_{hashlib.md5(pr_key.encode()).hexdigest()[:12]}"
             entries.append(
                 MemoryEntry(
+                    memory_id=memory_id,
                     scope_id=scope_id,
                     memory_type=MemoryType.EPISODIC,
                     content=f"[placeholder: {agent_id}_private_reasoning]",

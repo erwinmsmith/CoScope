@@ -79,7 +79,14 @@ class WorkspaceBuilder:
     ) -> MemoryEntry:
         paragraph_id = str(para.get("paragraph_id", f"para_{int(hashlib.md5(str(para.get('text', '')).encode()).hexdigest()[:8], 16) % 100000:05d}"))
         text = str(para.get("text", "") or "")
+        # Deterministic, cross-reasoning-path-stable memory_id: workspace
+        # paragraphs are dataset-level corpus and identical across GoT/CoT/ToT
+        # episodes of the same raw_item, so we hash only (dataset, paragraph_id).
+        # Same paragraph in any episode/rpt → same memory_id.
+        ws_key = f"ws|{dataset}|{paragraph_id}"
+        memory_id = f"mem_ws_{hashlib.md5(ws_key.encode()).hexdigest()[:12]}"
         return MemoryEntry(
+            memory_id=memory_id,
             scope_id=scope_id,
             memory_type=MemoryType.SEMANTIC,
             content=text,
