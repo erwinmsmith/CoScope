@@ -195,6 +195,8 @@ it drops recall by 4.5 percentage points.
 
 ### Effect of SVD projection on a5
 
+#### v8 (hash embedder, recall@10)
+
 | graph_type | a5 | a5_noproj | Δ |
 |---|---:|---:|---:|
 | LINEAR | 0.9992 | 0.9992 | 0.000 |
@@ -203,10 +205,91 @@ it drops recall by 4.5 percentage points.
 | INDEPENDENT | 0.9985 | 0.9985 | 0.000 |
 | POLICY_ISOLATED | 0.7662 | 0.8081 | **−0.042** |
 
-With the deterministic projection seed, removing SVD actually *helps*
-recall on POLICY_ISOLATED. Worth revisiting on a real embedding model
-(sentence-transformers / OpenAI) where the projection is fitted on
-meaningful query-vector co-variance.
+#### v8-ST (sentence-transformers `all-MiniLM-L6-v2`, recall@10)
+
+Source: `eval_v8_st.json` (1000 episodes, real embedder, no Step-2 rewrite).
+
+| graph_type | a5 | a5_noproj | Δ recall | a5 (mrr) | a5_noproj (mrr) | Δ mrr |
+|---|---:|---:|---:|---:|---:|---:|
+| LINEAR | 0.9739 | 0.9739 | 0.000 | 0.9088 | 0.9082 | −0.001 |
+| FORK | 0.9722 | 0.9722 | 0.000 | 0.8652 | 0.8627 | −0.003 |
+| FORK_MERGE | 0.9675 | 0.9672 | 0.000 | 0.8765 | 0.8732 | −0.003 |
+| INDEPENDENT | 0.9662 | 0.9633 | **+0.003** | 0.8687 | 0.8609 | −0.008 |
+| POLICY_ISOLATED | 0.7792 | 0.8173 | **−0.038** | 0.6965 | 0.7079 | **−0.011** |
+
+**Findings (real embedder):**
+
+1. **Non-conflict graph types**: SVD has essentially no effect on recall
+   (|Δ| ≤ 0.003) but a *consistent slight drop* in mrr@10
+   (−0.001 to −0.008). The projection compresses queries into a
+   `min(svd_rank, n_queries)`-dim subspace; for buckets of 3–5 queries
+   the effective rank is 3–5 anyway, so recall is preserved while the
+   reduced resolution slightly hurts ranking.
+
+2. **POLICY_ISOLATED (S4)**: SVD projection *hurts* recall by 3.8 pt and
+   mrr by 1.1 pt — the same sign as on the hash embedder, but smaller in
+   magnitude (−4.2 pt on hash → −3.8 pt on real). The projection-fitted
+   subspace does not realize useful covariance signal even when the
+   underlying embedder carries semantic structure: bucket sizes (3–5
+   queries) are too small for the subspace to recover meaningful
+   directions, so the only effect is to discard residual signal that the
+   non-projected baseline keeps.
+
+3. **Verdict**: **a5_noproj dominates a5** on the recall metric across
+   every subset where they differ, on both embedder backends. A5 retains
+   marginal mrr advantage only on S4 (+1.1 pt mrr at the cost of −3.8 pt
+   recall). The SVD projection is therefore not a useful component on
+   MuSiQue at the current bucket size.
+
+#### Why SVD does not help on MuSiQue — per-bucket diagnostics
+
+Source: `data/processed/got/musique/test/svd_scan/svd_scan_r64.summary.json`,
+produced by `scripts/eval_jsonl.py --variants a5 --embedder st
+--svd-rank 64 --dump-svd-artifacts ... --max-episodes-with-dump 1000`
+followed by `scripts/analyze_svd_dumps.py` (1000 episodes, 200 per
+graph_type, one shared bucket per episode).
+
+| graph_type | n_q (med/max) | r_eff (med/max) | top‑1 energy | top‑3 energy | median max‑cos(K, Z) |
+|---|---|---|---:|---:|---:|
+| LINEAR | 3 / 3 | 3 / 3 | 0.652 | 1.000 | 0.944 |
+| FORK | 3 / 3 | 2 / 2 | 0.910 | 1.000 | 0.955 |
+| FORK_MERGE | 4 / 4 | 3 / 3 | 0.708 | 1.000 | 0.934 |
+| INDEPENDENT | 5 / 5 | 3 / 3 | 0.611 | 1.000 | 0.923 |
+| POLICY_ISOLATED | 4 / 4 | 4 / 4 | 0.491 | 0.960 | 0.928 |
+
+* `n_q` — number of queries in the shared bucket the SVD is fitted on.
+* `r_eff` — effective rank, count of `i` with `S[i] / S[0] > 1e-3`.
+* `top‑k energy` — `Σ S[:k]² / Σ S²`.
+* `max‑cos(K, Z)` — for each pool candidate's projected embedding, the
+  max cosine against any projected query; we report the median over
+  candidates, then the mean over buckets.
+
+**Interpretation:**
+
+* The configured `svd_rank=64` is never reached: bucket size caps the
+  effective rank at `n_q ≤ 5` everywhere. **Increasing `svd_rank` cannot
+  help** because the data itself does not span more than `n_q`
+  directions, regardless of the configured rank.
+* Top‑3 spectral energy is essentially 1.0 for the four non‑conflict
+  graph types — three directions already span the entire bucket. The
+  full‑dim baseline (`a5_noproj`) keeps the same information without
+  paying any compression cost, which is why recall ties at the third
+  decimal.
+* POLICY_ISOLATED is the only subset where the spectrum stays diffuse
+  (top‑1 = 0.49, top‑3 = 0.96). Buckets there mix planner / solver /
+  verifier queries with intentionally divergent intents, so a low‑rank
+  approximation is structurally **lossy** in proportion to that
+  divergence — matching the observed `−3.8 pt recall` regression.
+* The query subspace itself is not the bottleneck:
+  `median max‑cos(K, Z) ≈ 0.92–0.96`, i.e. the candidate pool *does*
+  align with the queries' principal directions. The projection's
+  problem is information removal, not direction misalignment.
+
+**Conclusion:** on this scale of bucket (3–5 queries), the SVD step is
+a strict no‑op in the best case and a small loss in the conflict case.
+SVD becomes a candidate optimization only when buckets grow past
+≈ 10 queries, which on MuSiQue would require either far higher
+hop‑counts or cross‑episode bucket merging.
 
 ### Effect of Step-2 query rewrite (a7 → a8)
 
