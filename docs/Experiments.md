@@ -291,6 +291,25 @@ SVD becomes a candidate optimization only when buckets grow past
 ≈ 10 queries, which on MuSiQue would require either far higher
 hop‑counts or cross‑episode bucket merging.
 
+#### Status of SVD in the main pipeline (soft downgrade)
+
+Based on the diagnostics above, SVD is **not a recommended default** on
+MuSiQue at the current bucket size (`n_q = 3..5`). The code path
+remains first-class (``variant=a5``, ``a5_noproj``, ``a5_norerank``,
+``a6``) so future work on wider buckets can re‑enable it, but:
+
+* The **headline result for the shared-retrieval family is `a4`**
+  (`shared_mean + rerank + fallback`), not `a5`. `a4` ties or beats
+  `a5` on every subset and every k in the v8-ST numbers.
+* `a5_noproj` is retained as the **canonical ablation baseline** for
+  "shared retrieval without SVD"; whenever `a5_noproj ≥ a5`, report
+  `a5_noproj`.
+* The SVD path will only be promoted back to "primary" once we run on a
+  dataset / graph configuration where buckets routinely contain ≥ 10
+  queries (e.g. 5+ hop chains or cross-episode routing). Until then,
+  the `--svd-rank` and `--dump-svd-artifacts` CLI flags remain
+  research-only tools.
+
 ### Effect of Step-2 query rewrite (a7 → a8)
 
 | graph_type | recall (a7) | recall (a8) | Δ recall | mrr (a7) | mrr (a8) | **Δ mrr** |

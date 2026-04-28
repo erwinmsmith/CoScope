@@ -209,7 +209,18 @@ def run_build(args) -> int:
                             print(f"  [{idx+1}/{len(raw_items)}] {oid[:30]:30s} FAIL: {rho_or_reason}")
                             continue
 
-                        subset = ep_dict["rho_subset"].lower()
+                        # Shard naming: S4 eligibility takes precedence over
+                        # the rho-based subset label, matching the canonical
+                        # logic in construction/dataset_pipeline.py:205. Without
+                        # this override, POLICY_ISOLATED episodes (which are
+                        # always policy_conflict=True + s4_eligible=True but
+                        # still receive an S1/S2/S3 rho_subset from the
+                        # assigner) would silently land in s1_/s2_/s3_*.jsonl
+                        # shards and the S4 evaluation stratum would be empty.
+                        if ep_dict.get("s4_eligible"):
+                            subset = "s4"
+                        else:
+                            subset = ep_dict["rho_subset"].lower()
                         shard_key = f"{subset}_{gt.value.lower()}.jsonl"
                         f = _get_handle(shard_key)
                         f.write(json.dumps(ep_dict, ensure_ascii=False))

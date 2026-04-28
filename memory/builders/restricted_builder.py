@@ -108,15 +108,20 @@ class RestrictedBuilder:
         meta.update(meta_extra)
         # Deterministic memory_id: restricted placeholders are episode-scoped
         # (different verifier runs for different episodes) so include episode_id.
-        # Use source_paragraph_id when available; otherwise fall back to the
-        # content hash so two distinct entries within one episode don't collide.
+        # Within one episode, a single source_paragraph_id can back multiple
+        # distinct records (different 'kind' values: gold_fact, audit_note,
+        # clearance_note, ...), so the paragraph id alone is NOT unique. We
+        # therefore key on (episode_id, source_paragraph_id, content_hash) to
+        # guarantee uniqueness inside an episode while remaining stable when
+        # the same raw_item is rebuilt.
         content_str = str(record.get("content", "") or "")
+        content_hash = hashlib.md5(content_str.encode()).hexdigest()[:8]
         rs_basis = (
             meta.get("source_paragraph_id")
             or record.get("source")
-            or hashlib.md5(content_str.encode()).hexdigest()[:8]
+            or "no_source"
         )
-        rs_key = f"rs|{episode_id}|{rs_basis}"
+        rs_key = f"rs|{episode_id}|{rs_basis}|{content_hash}"
         memory_id = f"mem_rs_{hashlib.md5(rs_key.encode()).hexdigest()[:12]}"
         return MemoryEntry(
             memory_id=memory_id,
