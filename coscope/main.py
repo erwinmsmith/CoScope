@@ -118,6 +118,39 @@ def _write_id_manifest(path: str, raw_items: Iterable[dict]) -> Path:
     return manifest_path
 
 
+def _load_existing_original_ids_for_graph(
+    out_dir: Path,
+    graph_type_name: str,
+) -> tuple[set[str], int]:
+    """
+    Discover already-completed original_ids for one graph type from existing shards.
+
+    This is used by resume mode so we can skip finished samples and keep appending
+    to the current shard set instead of truncating previous progress.
+    """
+    existing_ids: set[str] = set()
+    loaded_rows = 0
+    suffix = f"_{graph_type_name.lower()}.jsonl"
+    for shard in sorted(out_dir.glob(f"*{suffix}")):
+        for lineno, line in enumerate(shard.read_text(encoding="utf-8").splitlines(), start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError as exc:
+                logger.warning(
+                    "Skipping unreadable JSONL line in %s:%d while resuming: %s",
+                    shard, lineno, exc,
+                )
+                continue
+            oid = str(item.get("original_id", "")).strip()
+            if oid:
+                existing_ids.add(oid)
+                loaded_rows += 1
+    return existing_ids, loaded_rows
+
+
 # ============================================================
 # Backend factories
 # ============================================================
@@ -300,21 +333,38 @@ def run_build(args) -> int:
             out_dir.mkdir(parents=True, exist_ok=True)
             if args.audit_after_build:
                 audit_roots.add(out_dir)
+            existing_ids_by_graph: Dict[str, set[str]] = {}
+            if args.resume_existing:
+                for gt in graph_types:
+                    existing_ids, loaded_rows = _load_existing_original_ids_for_graph(out_dir, gt.value)
+                    existing_ids_by_graph[gt.value] = existing_ids
+                    if existing_ids:
+                        logger.info(
+                            "[%s/%s] resume mode: found %d completed original_id(s) for %s across %d row(s)",
+                            dataset, split, len(existing_ids), gt.value, loaded_rows,
+                        )
             # Append-only shard handles (one file per subset_graph pair).
             shard_handles: Dict[str, any] = {}
 
             def _get_handle(key: str):
                 if key not in shard_handles:
                     p = out_dir / key
-                    shard_handles[key] = p.open("w", encoding="utf-8")
-                    logger.info("opened shard %s", p)
+                    mode = "a" if args.resume_existing else "w"
+                    shard_handles[key] = p.open(mode, encoding="utf-8")
+                    logger.info("opened shard %s (mode=%s)", p, mode)
                 return shard_handles[key]
 
             try:
                 for gt in graph_types:
                     print(f"\n=== {dataset}/{split} | graph_type = {gt.value} " + "=" * 20)
+                    skipped_existing = 0
                     for idx, raw in enumerate(raw_items):
                         oid = str(raw.get("original_id", f"item_{idx}"))
+                        if args.resume_existing and oid in existing_ids_by_graph.get(gt.value, set()):
+                            skipped_existing += 1
+                            if args.log_level == "DEBUG":
+                                print(f"  [{idx+1}/{len(raw_items)}] {oid[:30]:30s} SKIP: already completed")
+                            continue
                         t0 = time.perf_counter()
                         ep_dict, rho_or_reason = _process_one(
                             raw_item=raw, dataset=dataset, split=split,
@@ -343,6 +393,8 @@ def run_build(args) -> int:
                         print(f"  [{idx+1}/{len(raw_items)}] {oid[:30]:30s} "
                               f"rho={rho_or_reason:.3f} subset={ep_dict['rho_subset']} "
                               f"({dt:.1f}s)")
+                    if args.resume_existing and skipped_existing:
+                        print(f"  skipped already completed: {skipped_existing}")
             finally:
                 for h in shard_handles.values():
                     h.close()
@@ -396,6 +448,8 @@ def _parse_args(argv: List[str]) -> argparse.Namespace:
                    help="Fail if any id in --id-manifest is missing from the current dataset/split.")
     p.add_argument("--write-id-manifest", default=None,
                    help="Write the current post-filter original_id list to a UTF-8 .txt file.")
+    p.add_argument("--resume-existing", action="store_true",
+                   help="Resume from existing output shards by skipping completed original_ids and appending new rows.")
 
     # paths
     p.add_argument("--data-dir", default="coscope/data/raw")
