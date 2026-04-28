@@ -50,6 +50,12 @@ class PipelineConfig:
     enable_private_fallback: bool = True
     fallback_threshold: int = 5
     variant: str = "a5"
+    # When set to a directory path, _retrieve_svd_bucket will dump per-bucket
+    # artifacts (Q, full singular values S, Z, W_final, K_proj, plus a small
+    # JSON of bucket metadata) into npz files for offline analysis. Disabled
+    # by default to keep the hot path zero-overhead. The pipeline only writes
+    # files; consumers (e.g. scripts/analyze_svd_dumps.py) handle aggregation.
+    dump_svd_artifacts: Optional[str] = None
 
 
 class RetrievalPipeline:
@@ -299,6 +305,16 @@ class RetrievalPipeline:
         pool_embeddings = np.vstack(
             [self._embedding_for(memory) for memory in pool.candidates]
         ) if pool.candidates else np.zeros((0, 1), dtype="float32")
+
+        # Optional per-bucket artifact dump for offline SVD analysis.
+        if self.config.dump_svd_artifacts and strategy == "query_matrix_truncated_svd":
+            self._dump_svd_bucket(
+                bucket=bucket,
+                query_matrix=query_matrix,
+                projection_result=projection_result,
+                pool=pool,
+                pool_embeddings=pool_embeddings,
+            )
 
         if skip_fulldim_rerank and pool.candidates:
             # Pre-compute K in the projected subspace so scoring costs O(n*r)
@@ -759,10 +775,93 @@ class RetrievalPipeline:
                 "strategy": "query_matrix_truncated_svd",
                 "num_queries": n,
                 "singular_values_top5": S[:5].tolist() if len(S) >= 5 else S.tolist(),
+                # Full spectrum is needed for offline rank-energy analysis when
+                # --dump-svd-artifacts is enabled. Kept as a list (small: <=k).
+                "singular_values_full": S.tolist(),
                 "Z_shape": Z.shape,
                 "W_final_shape": W_final.shape,
             },
         )
+
+    def _dump_svd_bucket(
+        self,
+        bucket,
+        query_matrix,
+        projection_result,
+        pool,
+        pool_embeddings,
+    ) -> None:
+        """Persist per-bucket SVD artifacts to ``self.config.dump_svd_artifacts``.
+
+        Layout::
+
+            {dump_root}/{episode_id}/{bucket_id}.npz   (Q, S, Z, W_final, K_proj)
+            {dump_root}/{episode_id}/{bucket_id}.json  (bucket metadata)
+
+        ``episode_id`` is read from the first request's metadata; missing
+        episode_id falls back to ``"_unknown"``. Failures are logged but do
+        not raise (analysis hooks must never break the eval hot path).
+        """
+        import json as _json
+        import os as _os
+        import numpy as _np
+
+        try:
+            requests = list(bucket.requests)
+            episode_id = "_unknown"
+            if requests:
+                ep = (requests[0].metadata or {}).get("episode_id")
+                if ep:
+                    episode_id = str(ep)
+            bucket_id = getattr(bucket, "bucket_id", None) or getattr(bucket, "primary_scope", "bucket")
+            safe_bucket = str(bucket_id).replace("/", "_").replace(":", "_")
+
+            root = self.config.dump_svd_artifacts
+            ep_dir = _os.path.join(root, episode_id)
+            _os.makedirs(ep_dir, exist_ok=True)
+            npz_path = _os.path.join(ep_dir, f"{safe_bucket}.npz")
+            json_path = _os.path.join(ep_dir, f"{safe_bucket}.json")
+
+            W_final = projection_result.projection_matrix
+            Z = projection_result.projected
+            K_proj = (
+                pool_embeddings @ W_final
+                if pool_embeddings.size and pool_embeddings.shape[1] == W_final.shape[0]
+                else _np.zeros((0, W_final.shape[1]), dtype="float32")
+            )
+            S_full = _np.asarray(
+                projection_result.metadata.get("singular_values_full", []),
+                dtype="float32",
+            )
+            _np.savez_compressed(
+                npz_path,
+                Q=query_matrix.embeddings.astype("float32"),
+                S=S_full,
+                Z=Z.astype("float32"),
+                W_final=W_final.astype("float32"),
+                K_proj=K_proj.astype("float32"),
+                pool_embeddings=pool_embeddings.astype("float32"),
+            )
+
+            meta = {
+                "episode_id": episode_id,
+                "bucket_id": str(bucket_id),
+                "primary_scope": getattr(bucket, "primary_scope", None),
+                "n_queries": int(Z.shape[0]),
+                "k_embed_dim": int(W_final.shape[0]),
+                "r_svd": int(W_final.shape[1]),
+                "n_pool_candidates": int(pool_embeddings.shape[0]),
+                "shared_top_k": int(self.config.shared_top_k),
+                "svd_rank_config": int(self.config.svd_rank),
+                "request_ids": [r.request_id for r in requests],
+                "agent_ids": [r.agent_id for r in requests],
+                "agent_roles": [getattr(r.role, "value", str(r.role)) for r in requests],
+                "candidate_memory_ids": [m.memory_id for m in pool.candidates],
+            }
+            with open(json_path, "w", encoding="utf-8") as f:
+                _json.dump(meta, f, ensure_ascii=False, indent=2)
+        except Exception as exc:  # pragma: no cover - analysis hook is best-effort
+            logger.warning("dump_svd_artifacts failed: %s", exc)
 
     def _normalize_variant(self, variant: str) -> str:
         aliases = {

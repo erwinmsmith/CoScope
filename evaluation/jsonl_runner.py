@@ -345,6 +345,14 @@ def evaluate_jsonl(
         _register_episode_agents(coscope, episode)
         _preload_memories(coscope, episode)
 
+        # Stamp episode_id onto every request.metadata so downstream pipeline
+        # hooks (e.g. _dump_svd_bucket) can group artifacts by episode without
+        # needing to thread a separate kwarg through retrieve(). Idempotent.
+        for _req in episode.retrieval_requests:
+            md = dict(_req.metadata or {})
+            md.setdefault("episode_id", episode.episode_id)
+            _req.metadata = md
+
         # Restricted (verifier-only) memory ids for this episode. The Schema
         # defines the 'restricted' layer as audit / quarantine / policy-isolated
         # content that must never surface in non-verifier results. We gate the
