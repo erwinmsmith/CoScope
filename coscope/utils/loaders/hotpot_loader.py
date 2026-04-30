@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from typing import Any, Dict, List, Tuple
 
 from coscope.utils.loaders.base_loader import BaseLoader
@@ -19,6 +20,23 @@ class HotpotLoader(BaseLoader):
     DEFAULT_TRAIN = "distractor_train_00000.parquet"
     DEFAULT_DEV = "distractor_validation.parquet"
 
+    _TEXT_FIXES = {
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2015": "-",
+        "\u2212": "-",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2026": "...",
+        "\u00a0": " ",
+        "鈥": "-",
+        "揂": "A",
+        "揘": "N",
+        "揅": "C",
+    }
+
     def load(self) -> List[Dict[str, Any]]:
         path = self._resolve_split_file(self.DEFAULT_TRAIN, self.DEFAULT_DEV)
         raw = self._load_any(path)
@@ -29,9 +47,9 @@ class HotpotLoader(BaseLoader):
     def _normalize(self, row: Dict[str, Any], idx: int) -> Dict[str, Any]:
         item = self._empty_raw_item()
         item["original_id"] = str(row.get("_id") or f"idx_{idx:06d}")
-        item["question"] = row.get("question", "") or ""
-        item["answer"] = str(row.get("answer", ""))
-        item["qa_type"] = row.get("type") or "bridge"
+        item["question"] = self._clean_text(row.get("question", "") or "")
+        item["answer"] = self._clean_text(str(row.get("answer", "")))
+        item["qa_type"] = self._clean_text(row.get("type") or "bridge")
         item["hop_count"] = 2
 
         context = row.get("context", [])
@@ -52,16 +70,19 @@ class HotpotLoader(BaseLoader):
         distractor: List[Dict[str, Any]] = []
         for p_idx, (title, sentences) in enumerate(zip(titles, sentences_list)):
             text = " ".join(sentences) if isinstance(sentences, list) else str(sentences)
+            text = self._clean_text(text)
             is_gold = title in gold_titles
             para = {
                 "paragraph_id": f"para_{p_idx:03d}",
                 "text": text,
-                "title": title,
+                "title": self._clean_text(title),
                 "is_gold": is_gold,
                 "hop_index": title_to_hop.get(title) if is_gold else None,
             }
             (supporting if is_gold else distractor).append(para)
-            title_map.setdefault(title, (p_idx, list(sentences) if isinstance(sentences, list) else [str(sentences)]))
+            clean_sentences = list(sentences) if isinstance(sentences, list) else [str(sentences)]
+            clean_sentences = [self._clean_text(s) for s in clean_sentences]
+            title_map.setdefault(self._clean_text(title), (p_idx, clean_sentences))
 
         item["supporting_paragraphs"] = supporting
         item["distractor_paragraphs"] = distractor
@@ -69,7 +90,7 @@ class HotpotLoader(BaseLoader):
         # supporting_facts normalized
         facts: List[Dict[str, Any]] = []
         for title, sent_idx in sf_pairs:
-            mapped = title_map.get(title)
+            mapped = title_map.get(self._clean_text(title))
             if mapped is None:
                 continue
             facts.append(
@@ -81,7 +102,7 @@ class HotpotLoader(BaseLoader):
         sub_qs: List[str] = []
         for k in range(2):
             if k < len(sf_pairs):
-                title = sf_pairs[k][0]
+                title = self._clean_text(sf_pairs[k][0])
                 sub_qs.append(f"Find information about {title}.")
             else:
                 sub_qs.append(item["question"])
@@ -96,7 +117,7 @@ class HotpotLoader(BaseLoader):
                 if k - 1 >= len(sf_pairs):
                     break
                 title, sent_idx = sf_pairs[k - 1]
-                mapped = title_map.get(title)
+                mapped = title_map.get(self._clean_text(title))
                 if mapped is None:
                     continue
                 ctx_idx, sentences = mapped
@@ -145,3 +166,10 @@ class HotpotLoader(BaseLoader):
                     sf_pairs.append((str(fact[0]), 0))
 
         return titles, sentences_list, sf_pairs
+
+    @classmethod
+    def _clean_text(cls, text: Any) -> str:
+        s = unicodedata.normalize("NFKC", str(text))
+        for src, dst in cls._TEXT_FIXES.items():
+            s = s.replace(src, dst)
+        return s.strip()
