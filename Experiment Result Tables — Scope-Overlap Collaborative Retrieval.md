@@ -159,13 +159,15 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 ## Table 1b · Retrieval Quality — MuSiQue (12085 ep, GoT, **Qwen text-embedding-v3**) — PAPER MAIN
 
-> **Source:** `data/processed/got/musique/test/eval_v9_qwen_full_k10.json`
-> (k=10 done, k=5 / k=20 queued, will populate as soon as the resume
-> screen finishes). Embedder: DashScope `text-embedding-v3` (dim=1024).
-> Same 12085-ep dev split as Table 1a. PYTHONHASHSEED=0.
+> **Source:** `data/processed/got/musique/test/eval_v9_qwen_full_{k5,k10,k20}.json`
+> + A8 from `data/processed/got/musique/test_qi/eval_v9_qwen_a8_k10.json`.
+> Embedder: DashScope `text-embedding-v3` (dim=1024). Same 12085-ep test
+> split as Table 1a. PYTHONHASHSEED=0.
 >
-> Run wall: 9573 s (≈2.66 h, single thread, ~85 k unique texts → all
-> cached in `text-embedding-v3-d1024.sqlite`).
+> Run walls: k=10 = 9573 s (cold, ~85 k unique texts → SQLite cache),
+> k=5 = ~3700 s (cache-warm), k=20 = 3881 s (cache-warm), Stage B
+> A8 query_intent = 4729 s (qwen-plus, 32 workers, 12085 ep, 64 k LLM
+> calls, fb-rate 0.05 %).
 
 ### 1b.1 Recall@10 / MRR@10 (HEADLINE)
 
@@ -182,29 +184,38 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 | A5_norerank | 0.4608 | 0.4808 | 0.4899 | 0.4452 | 0.5231 | 0.4631 | 0.3473 | 0.4431 | 0.000 | 75% |
 | **A6** | 0.9911 | 0.9734 | 0.9981 | 0.7745 | 0.8954 | 0.8315 | 0.8050 | 0.7093 | 0.000 | 45% |
 | **A7** | 0.9911 | 0.9734 | 0.9981 | 0.7745 | 0.8954 | 0.8315 | 0.8050 | 0.7093 | 0.000 | 45% |
-| **A8** | (pending Stage B) | | | | | | | | | |
+| **A8** | 0.9928 | 0.9760 | 0.9986 | 0.7754 | **0.9223** | **0.8796** | **0.8749** | 0.7283 | 0.000 | 45% |
+
+> **A8 (query_intent rerank) — Stage B done (12085 ep, qwen-plus, 32 workers, wall 79 min).**
+> Source: `data/processed/got/musique/test_qi/eval_v9_qwen_a8_k10.json`. A8 is
+> identical to A7 on stage-1 candidates (same shared retriever, same router,
+> so R@10 lifts are tiny: +0.1–0.3 pt), but the LLM-generated `query_intent`
+> rerank produces a clear MRR boost: **+2.7 / +4.8 / +7.0 / +1.9 pt** on
+> S1/S2/S3/S4 — i.e. correct memories are pushed into earlier ranks within
+> the top-10. A4 still wins R@k on S2/S4; A8 is the **MRR / top-1 latency**
+> winner.
 
 > Bold = best on each column. *Avg Savings* averages the per-subset
 > first-stage savings reported by the runner.
 
 ### 1b.2 Recall@5 / Recall@20 (alternative cutoffs)
 
-> k=5 from `eval_v9_qwen_full_k5.json` ✅; k=20 in progress
-> (`eval_v9_qwen_full_k20.json`, screen `coscope_k20`).
+> k=5 from `eval_v9_qwen_full_k5.json` ✅; k=20 from
+> `eval_v9_qwen_full_k20.json` ✅ (wall 3881 s, 12085 ep, cache-warm).
 
 | **Variant**     | **S1 R@5** | **S1 R@20** | **S2 R@5** | **S2 R@20** | **S4 R@5** | **S4 R@20** |
 | --------------- | ---------: | ----------: | ---------: | ----------: | ---------: | ----------: |
-| **A1**          | 0.7644     | (pending)   | 0.7595     | (pending)   | 0.6720     | (pending)   |
-| A2              | 0.4854     |             | 0.5335     |             | 0.4776     |             |
-| **A3**          | 0.5202     |             | 0.5488     |             | 0.5909     |             |
-| **A4**          | **0.7851** |             | **0.7806** |             | **0.8025** |             |
-| A4_nofb         | 0.7851     |             | 0.7806     |             | 0.8025     |             |
-| A4_norerank     | 0.5202     |             | 0.5488     |             | 0.5909     |             |
-| **A5**          | 0.7678     |             | 0.7622     |             | 0.7058     |             |
-| A5_noproj       | 0.7659     |             | 0.7604     |             | 0.7064     |             |
-| A5_norerank     | 0.3112     |             | 0.3261     |             | 0.2983     |             |
-| **A6**          | 0.7705     |             | 0.7656     |             | 0.6760     |             |
-| **A7**          | 0.7705     |             | 0.7656     |             | 0.6760     |             |
+| **A1**          | 0.7644     | **1.0000**  | 0.7595     | **1.0000**  | 0.6720     | 0.7797      |
+| A2              | 0.4854     | 0.8847      | 0.5335     | 0.8836      | 0.4776     | 0.7065      |
+| **A3**          | 0.5202     | 0.9346      | 0.5488     | 0.9342      | 0.5909     | 0.9561      |
+| **A4**          | **0.7851** | **1.0000**  | **0.7806** | **1.0000**  | **0.8025** | 0.9709      |
+| A4_nofb         | 0.7851     | 1.0000      | 0.7806     | 1.0000      | 0.8025     | 0.9713      |
+| A4_norerank     | 0.5202     | 0.9346      | 0.5488     | 0.9342      | 0.5909     | 0.9561      |
+| **A5**          | 0.7678     | 1.0000      | 0.7622     | 1.0000      | 0.7058     | 0.9582      |
+| A5_noproj       | 0.7659     | 1.0000      | 0.7604     | 1.0000      | 0.7064     | **0.9853**  |
+| A5_norerank     | 0.3112     | 0.7526      | 0.3261     | 0.7406      | 0.2983     | 0.7728      |
+| **A6**          | 0.7705     | 1.0000      | 0.7656     | 1.0000      | 0.6760     | 0.7797      |
+| **A7**          | 0.7705     | 1.0000      | 0.7656     | 1.0000      | 0.6760     | 0.7797      |
 
 > **R@5 observation:** A4 still wins on every cell. Notably A4 keeps a
 > larger margin over A1 at small k: S4 R@5 = 0.802 vs A1 R@5 = 0.672
@@ -212,6 +223,18 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 > evidence into the top-5, not just within the top-10. Block routing
 > (A6) costs S4 R@5 by 12.6 pt vs A4 (0.676 vs 0.802), the same
 > direction as at k=10.
+>
+> **R@20 observation:** the candidate pool is large enough that S1/S2 hit
+> 1.000 for almost every variant — k=20 saturates on these subsets and is
+> not informative. **S4** remains the discriminator: A5_noproj (0.985) >
+> A4_nofb (0.971) ≈ A4 (0.971) > A5 (0.958) > A3 (0.956) ≫ A6/A7/A1
+> (0.780). The block-router variants (A6/A7) are capped at A1's recall
+> because they never fall back to the global private pool — confirming
+> the design choice to keep A4-style fallback as the headline. A5's
+> projection slightly *hurts* S4 R@20 (–2.7 pt vs A5_noproj), the only
+> place where the projection is net-negative; we keep A5 in the chain
+> for the projection ablation story but A4 / A4_nofb is the recommended
+> production setting.
 
 ---
 
