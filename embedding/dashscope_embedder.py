@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 _DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-_BATCH_LIMIT = 25          # DashScope hard cap per request
+_BATCH_LIMIT = 10          # DashScope hard cap per request (v3 lowered from 25 to 10 in 2026)
 _MAX_CHARS = 8192 * 3      # ~8192 tokens safety truncation
 
 
@@ -95,6 +95,19 @@ class DashScopeEmbedder(Embedder):
                 )
                 time.sleep(wait)
         raise RuntimeError(f"DashScope embed failed after retries: {last_err}")
+
+    # ------------------------------------------------------------------
+    # engine.EmbeddingProvider shape (used by retrieval pipeline)
+    # ------------------------------------------------------------------
+
+    def embed_query(self, query: str) -> np.ndarray:
+        return self.embed(query)
+
+    def embed_texts(self, texts: List[str]) -> List[np.ndarray]:
+        result = self.embed_batch(texts)
+        return [row for row in result.vectors]
+
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _truncate(text: str) -> str:

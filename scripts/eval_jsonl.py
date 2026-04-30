@@ -39,6 +39,9 @@ def _make_engine_factory(
     st_model: str,
     svd_rank: int = None,
     dump_svd_artifacts: str = None,
+    dashscope_model: str = "text-embedding-v3",
+    dashscope_dim: int = 1024,
+    cache_path: str = None,
 ):
     """Return a zero-arg factory creating a fresh CoScope engine.
 
@@ -79,8 +82,23 @@ def _make_engine_factory(
         def _factory_default():
             return _apply_overrides(CoScope())
         return _factory_default
+    if embedder == "dashscope":
+        # Real DashScope text-embedding-v3 (paper setup). Wrap in disk
+        # cache so re-runs / variant sweeps don't re-pay API cost.
+        from embedding import DashScopeEmbedder, DiskCachedEmbedder
+        from pathlib import Path as _Path
+        inner = DashScopeEmbedder(model=dashscope_model, dim=dashscope_dim)
+        if cache_path:
+            shared_embedder = DiskCachedEmbedder(
+                inner, _Path(cache_path)
+            )
+        else:
+            shared_embedder = inner
+        def _factory_dashscope():
+            return _apply_overrides(CoScope(embedding_provider=shared_embedder))
+        return _factory_dashscope
     raise ValueError(
-        f"Unknown embedder '{embedder}'; expected one of 'random', 'st', 'default'."
+        f"Unknown embedder '{embedder}'; expected one of 'random', 'st', 'dashscope', 'default'."
     )
 
 
@@ -148,11 +166,32 @@ def main() -> int:
     )
     parser.add_argument(
         "--embedder",
-        choices=["random", "st", "default"],
+        choices=["random", "st", "dashscope", "default"],
         default="random",
         help="'random' deterministic hash (smoke, zero setup); "
-             "'st' offline sentence-transformers (no API, first run downloads "
-             "a small model); 'default' follows config.yaml.",
+             "'st' offline sentence-transformers (no API); "
+             "'dashscope' real Qwen text-embedding-v3 (paper setup, needs "
+             "DASHSCOPE_API_KEY; recommend pairing with --cache-dir); "
+             "'default' follows config.yaml.",
+    )
+    parser.add_argument(
+        "--dashscope-model",
+        default="text-embedding-v3",
+        help="DashScope embedding model (paper main: text-embedding-v3).",
+    )
+    parser.add_argument(
+        "--dashscope-dim",
+        type=int,
+        default=1024,
+        help="DashScope embedding dim (v3 supports 512/768/1024).",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        default=None,
+        help="If set, use a disk-cached wrapper around the embedder. "
+             "The cache is content-addressed (sha1 of model|dim|text), "
+             "so it is safe across runs and variants. Strongly recommended "
+             "with --embedder dashscope.",
     )
     parser.add_argument(
         "--embedding-dim",
@@ -203,10 +242,27 @@ def main() -> int:
     for p in shard_paths:
         print(f"  - {p}")
 
+    cache_path = None
+    if args.cache_dir:
+        from pathlib import Path as _P
+        suffix = (
+            f"{args.dashscope_model.replace('/', '_')}-d{args.dashscope_dim}.sqlite"
+            if args.embedder == "dashscope"
+            else f"{args.st_model.replace('/', '_')}.sqlite"
+            if args.embedder == "st"
+            else "random.sqlite"
+        )
+        cache_path = str(_P(args.cache_dir) / suffix)
+        _P(args.cache_dir).mkdir(parents=True, exist_ok=True)
+        print(f"Embedder cache: {cache_path}")
+
     engine_factory = _make_engine_factory(
         args.embedder,
         args.embedding_dim,
         args.st_model,
+        dashscope_model=args.dashscope_model,
+        dashscope_dim=args.dashscope_dim,
+        cache_path=cache_path,
         svd_rank=args.svd_rank,
         dump_svd_artifacts=args.dump_svd_artifacts,
     )

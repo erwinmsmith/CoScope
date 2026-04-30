@@ -33,7 +33,7 @@ from construction.dataset_pipeline import DatasetPipeline
 #   S4 source: POLICY_ISOLATED (auto-added for test splits unless disabled)
 DEFAULT_GRAPH_TYPES_BY_DATASET = {
     "musique":         [GraphType.LINEAR, GraphType.FORK, GraphType.FORK_MERGE, GraphType.INDEPENDENT],
-    "2wikimultihopqa": [GraphType.LINEAR, GraphType.FORK, GraphType.FORK_MERGE, GraphType.INDEPENDENT],
+    "2wikimhqa":       [GraphType.LINEAR, GraphType.FORK, GraphType.FORK_MERGE, GraphType.INDEPENDENT],
     "hotpotqa":        [GraphType.LINEAR, GraphType.FORK, GraphType.FORK_MERGE, GraphType.INDEPENDENT],
     "gsm8k":           [GraphType.LINEAR, GraphType.FORK, GraphType.FORK_MERGE, GraphType.INDEPENDENT],
     "math":            [GraphType.LINEAR, GraphType.FORK, GraphType.FORK_MERGE, GraphType.INDEPENDENT],

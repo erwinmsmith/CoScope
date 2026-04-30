@@ -24,10 +24,12 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 
@@ -101,6 +103,12 @@ class GenStats:
     template_fallback: int = 0
     skipped_no_raw: int = 0
     elapsed_s: float = 0.0
+
+    def lock(self):
+        """Return a per-instance lock created lazily for thread-safe updates."""
+        if not hasattr(self, "_lock"):
+            object.__setattr__(self, "_lock", threading.Lock())
+        return self._lock
 
 
 def _call_llm_with_retry(llm: Any, prompt: str, max_retries: int = 2) -> Optional[str]:
@@ -245,47 +253,226 @@ def _patch_episode(
     return True
 
 
+# ---------------------------------------------------------------------------
+# Concurrent variant: collect all (episode, request) tasks, run LLM calls
+# through a ThreadPoolExecutor, then write back. Used when --workers > 1.
+# ---------------------------------------------------------------------------
+
+
+def _prepare_task(
+    episode: Episode,
+    request: RetrievalRequest,
+    raw_items: Dict[str, Dict[str, Any]],
+    stats: GenStats,
+) -> Optional[Tuple[Any, ...]]:
+    """Return (request, raw_item, role, node, prompt) or None on early fallback.
+
+    A None return means the caller must short-circuit to template fallback
+    (no LLM call). Stats are updated under the GenStats lock.
+    """
+    oid = _original_id_from_episode(episode)
+    raw_item = raw_items.get(oid) if oid else None
+    if raw_item is None:
+        with stats.lock():
+            stats.skipped_no_raw += 1
+        return None
+
+    role = request.role.value if hasattr(request.role, "value") else str(request.role)
+    node = _node_of_request(request, episode.got_graph, episode)
+    if node is None:
+        with stats.lock():
+            stats.template_fallback += 1
+        md = dict(request.metadata or {})
+        md["query_intent"] = request.query or ""
+        request.metadata = md
+        return None
+
+    prior = _build_prior_conclusions(request, episode.got_graph, episode)
+    prompt = prompt_assembly.build_query_intent_prompt(
+        role=role,
+        raw_item=raw_item,
+        node=node,
+        prior_conclusions=prior,
+        reasoning_path_type=ReasoningPathType.GOT,
+    )
+    return (request, raw_item, role, node, prompt)
+
+
+def _patch_episode_concurrent(
+    episode: Episode,
+    raw_items: Dict[str, Dict[str, Any]],
+    llm: Any,
+    stats: GenStats,
+    pool: ThreadPoolExecutor,
+) -> bool:
+    """Submit all LLM calls for one episode to ``pool`` and join results.
+
+    Single-episode-in-flight version (kept for backwards compatibility).
+    See :func:`_patch_batch_concurrent` for the cross-episode pipelined
+    version used by `--workers > 1`.
+    """
+    tasks: List[Tuple[Any, ...]] = []
+    for request in episode.retrieval_requests:
+        with stats.lock():
+            stats.total_requests += 1
+        prepared = _prepare_task(episode, request, raw_items, stats)
+        if prepared is not None:
+            tasks.append(prepared)
+
+    if not tasks:
+        return True
+
+    futures = [pool.submit(_call_llm_with_retry, llm, t[4]) for t in tasks]
+    for (request, raw_item, role, node, _prompt), fut in zip(tasks, futures):
+        text = fut.result()
+        _apply_text(request, text, role, raw_item, node, stats)
+    return True
+
+
+def _apply_text(
+    request: RetrievalRequest,
+    text: Optional[str],
+    role: str,
+    raw_item: Dict[str, Any],
+    node: Any,
+    stats: GenStats,
+) -> None:
+    """Write back final query_intent (LLM text or template fallback)."""
+    if text:
+        with stats.lock():
+            stats.generated += 1
+        intent = text
+    else:
+        with stats.lock():
+            stats.template_fallback += 1
+        if role == "planner":
+            intent = fallback_synth.synth_planner_query_intent(raw_item)
+        elif role == "solver":
+            intent = fallback_synth.synth_solver_query_intent(raw_item, node)
+        elif role == "verifier":
+            intent = fallback_synth.synth_verifier_query_intent(raw_item)
+        else:
+            intent = request.query or ""
+    md = dict(request.metadata or {})
+    md["query_intent"] = intent
+    request.metadata = md
+
+
+def _patch_batch_concurrent(
+    episodes: List[Episode],
+    raw_items: Dict[str, Dict[str, Any]],
+    llm: Any,
+    stats: GenStats,
+    pool: ThreadPoolExecutor,
+) -> None:
+    """Cross-episode pipelined LLM patching.
+
+    Collects every (episode, request) prompt across the supplied batch,
+    submits them all to the shared ``pool`` simultaneously, then writes
+    each response back into the corresponding request. Effective
+    concurrency = min(workers, total_tasks_in_batch), so picking a batch
+    size that is a few × workers keeps the pool saturated and amortizes
+    per-episode wall time across many requests.
+    """
+    tasks_per_episode: List[List[Tuple[Any, ...]]] = []
+    flat_tasks: List[Tuple[Any, ...]] = []
+    for episode in episodes:
+        eps_tasks: List[Tuple[Any, ...]] = []
+        for request in episode.retrieval_requests:
+            with stats.lock():
+                stats.total_requests += 1
+            prepared = _prepare_task(episode, request, raw_items, stats)
+            if prepared is not None:
+                eps_tasks.append(prepared)
+        tasks_per_episode.append(eps_tasks)
+        flat_tasks.extend(eps_tasks)
+
+    if not flat_tasks:
+        return
+
+    futures = [pool.submit(_call_llm_with_retry, llm, t[4]) for t in flat_tasks]
+    fut_iter = iter(futures)
+    for eps_tasks in tasks_per_episode:
+        for (request, raw_item, role, node, _prompt) in eps_tasks:
+            fut = next(fut_iter)
+            _apply_text(request, fut.result(), role, raw_item, node, stats)
+
+
 def _process_shards(
     shards: List[Path],
     raw_items: Dict[str, Dict[str, Any]],
     llm: Any,
     output_dir: Path,
     max_episodes: Optional[int],
+    workers: int = 1,
+    batch_size: int = 16,
 ) -> GenStats:
     stats = GenStats()
     serializer = Serializer()
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    pool: Optional[ThreadPoolExecutor] = None
+    if workers and workers > 1:
+        pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="qi-")
+        print(
+            f"[generate_query_intent] concurrency: workers={workers} "
+            f"batch_size={batch_size}", flush=True,
+        )
+
     t0 = time.perf_counter()
     episode_count = 0
-    for shard_path in shards:
-        out_path = output_dir / shard_path.name
-        episodes = serializer.read_jsonl(shard_path)
-        with out_path.open("w", encoding="utf-8") as out_f:
-            for episode in episodes:
-                if max_episodes is not None and episode_count >= max_episodes:
-                    out_f.write(
-                        json.dumps(serializer.episode_to_dict(episode), ensure_ascii=False)
-                        + "\n"
-                    )
-                    continue
-                _patch_episode(episode, raw_items, llm, stats)
-                out_f.write(
-                    json.dumps(serializer.episode_to_dict(episode), ensure_ascii=False)
-                    + "\n"
-                )
-                episode_count += 1
-                if episode_count % 10 == 0:
+    try:
+        for shard_path in shards:
+            out_path = output_dir / shard_path.name
+            episodes = serializer.read_jsonl(shard_path)
+            with out_path.open("w", encoding="utf-8") as out_f:
+                buffer: List[Episode] = []
+
+                def _flush_buffer():
+                    nonlocal episode_count
+                    if not buffer:
+                        return
+                    if pool is not None:
+                        _patch_batch_concurrent(buffer, raw_items, llm, stats, pool)
+                    else:
+                        for ep in buffer:
+                            _patch_episode(ep, raw_items, llm, stats)
+                    for ep in buffer:
+                        out_f.write(
+                            json.dumps(serializer.episode_to_dict(ep), ensure_ascii=False)
+                            + "\n"
+                        )
+                        episode_count += 1
+                    buffer.clear()
                     elapsed = time.perf_counter() - t0
                     rate = episode_count / max(elapsed, 1e-3)
+                    eta = (12085 - episode_count) / max(rate, 1e-3) / 60.0
                     print(
-                        f"[generate_query_intent] episodes={episode_count} "
-                        f"requests={stats.total_requests} "
-                        f"llm_ok={stats.generated} fb={stats.template_fallback} "
-                        f"rate={rate:.2f} ep/s",
+                        f"[generate_query_intent] ep={episode_count} "
+                        f"req={stats.total_requests} "
+                        f"ok={stats.generated} fb={stats.template_fallback} "
+                        f"skip={stats.skipped_no_raw} "
+                        f"rate={rate:.2f}ep/s eta={eta:.1f}min",
                         flush=True,
                     )
-        print(f"[generate_query_intent] wrote {out_path}")
+
+                for episode in episodes:
+                    if max_episodes is not None and episode_count + len(buffer) >= max_episodes:
+                        # Flush whatever is buffered, then copy remaining episodes verbatim.
+                        _flush_buffer()
+                        out_f.write(
+                            json.dumps(serializer.episode_to_dict(episode), ensure_ascii=False)
+                            + "\n"
+                        )
+                        continue
+                    buffer.append(episode)
+                    if len(buffer) >= batch_size:
+                        _flush_buffer()
+                _flush_buffer()
+            print(f"[generate_query_intent] wrote {out_path}")
+    finally:
+        if pool is not None:
+            pool.shutdown(wait=True)
 
     stats.elapsed_s = time.perf_counter() - t0
     return stats
@@ -314,6 +501,22 @@ def main():
         type=int,
         default=None,
         help="Limit total episodes patched across all shards (for a small-scale run).",
+    )
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Concurrent LLM workers (ThreadPoolExecutor). Default 1 (sequential). "
+             "For 12085-ep MuSiQue runs use 16-32; DashScope qwen-plus tolerates "
+             "16-32 concurrent in practice.",
+    )
+    p.add_argument(
+        "--batch-size",
+        type=int,
+        default=16,
+        help="Number of episodes pipelined together when --workers > 1. "
+             "Effective in-flight LLM calls ≈ batch_size × requests_per_episode "
+             "(MuSiQue: ~5). Recommend batch_size ≥ workers for full saturation.",
     )
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args()
@@ -346,6 +549,8 @@ def main():
         llm=llm,
         output_dir=Path(args.output_dir),
         max_episodes=args.max_episodes,
+        workers=args.workers,
+        batch_size=args.batch_size,
     )
     print(
         f"\n[summary] episodes_patched_requests={stats.total_requests} "
