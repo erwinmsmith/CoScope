@@ -238,6 +238,118 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 ---
 
+## Table 1c · Retrieval Quality — 2WikiMultiHopQA (62 880 ep, GoT, **Qwen text-embedding-v3**)
+
+> **Source:** `data/processed/got/2wikimhqa/test/eval_v9_qwen_full_{k5,k10,k20}.json`.
+> Embedder: DashScope `text-embedding-v3` (dim=1024). Same 11-variant lineup,
+> same evaluator as §1b. PYTHONHASHSEED=0. Wall: k=10 cold ≈ 6 h (cache cold
+> for 2Wiki corpus), k=5 / k=20 cache-warm ~45 min each.
+>
+> Per-subset N: **S1=15042, S2=16319, S3=18943, S4=12576**. (S4 has no
+> `mem_rs_` restricted-layer entries on 2Wiki because the RestrictedBuilder
+> only loads from interim files prepared for MuSiQue; A2's cFMR is
+> mechanically 0 on this dataset and is not directly comparable to MuSiQue.)
+
+### 1c.1 Recall@10 / MRR@10 (HEADLINE)
+
+| **Variant** | **S1 R@10** | **S2 R@10** | **S3 R@10** | **S4 R@10** | **S1 MRR@10** | **S2 MRR@10** | **S3 MRR@10** | **S4 MRR@10** | **S4 cFMR** | **Avg Savings** |
+| ----------- | ----------: | ----------: | ----------: | ----------: | ------------: | ------------: | ------------: | ------------: | ----------: | --------------: |
+| **A1** | 0.9980 | 0.9792 | 0.9999 | 0.7679 | 0.9295 | 0.8708 | 0.9458 | 0.7283 | 0.000 | 0% |
+| A2 | 0.8663 | 0.8819 | 0.9814 | 0.9201 | 0.9250 | 0.8622 | 0.9335 | **0.9105** | 0.000 | 75% |
+| A3 | 0.8675 | 0.8835 | 0.9823 | 0.9303 | 0.9244 | 0.8609 | 0.9333 | 0.9094 | 0.000 | 75% |
+| **A4** | 0.9980 | 0.9793 | 0.9999 | **0.9806** | 0.9296 | 0.8707 | 0.9458 | 0.8704 | 0.000 | 75% |
+| A4_nofb | 0.9980 | 0.9793 | 0.9999 | 0.9806 | 0.9296 | 0.8707 | 0.9458 | 0.8704 | 0.000 | 75% |
+| A4_norerank | 0.8675 | 0.8835 | 0.9823 | 0.9303 | 0.9244 | 0.8609 | 0.9333 | 0.9094 | 0.000 | 75% |
+| **A5** | **0.9981** | **0.9817** | 0.9999 | 0.9467 | 0.9334 | 0.8855 | 0.9503 | 0.7835 | 0.000 | 75% |
+| A5_noproj | 0.9981 | 0.9815 | 0.9999 | 0.9467 | **0.9345** | **0.8867** | **0.9508** | 0.7838 | 0.000 | 75% |
+| A5_norerank | 0.8740 | 0.8702 | 0.9750 | 0.8714 | 0.7448 | 0.7100 | 0.6877 | 0.7421 | 0.000 | 75% |
+| **A6** | 0.9981 | 0.9816 | 0.9999 | 0.7679 | 0.9332 | 0.8853 | 0.9502 | 0.7286 | 0.000 | 45% |
+| **A7** | 0.9981 | 0.9816 | 0.9999 | 0.7679 | 0.9332 | 0.8853 | 0.9502 | 0.7286 | 0.000 | 45% |
+| **A8** | (Stage B running) | | | | | | | | | |
+
+> Headline: **A4 lifts S4 R@10 from 0.768 (A1) → 0.981, Δ = +21.3 pt**, while
+> keeping S1/S2/S3 saturated and cFMR = 0.000. A5 wins MRR on S1/S2/S3 by
+> ~0.5 pt over A1; A5_noproj is the *MRR* winner. Block-routed A6/A7
+> degenerate to A1 on S4 (no fallback).
+
+### 1c.2 Recall@5 / Recall@20 (alternative cutoffs)
+
+| **Variant**     | **S1 R@5** | **S1 R@20** | **S2 R@5** | **S2 R@20** | **S4 R@5** | **S4 R@20** |
+| --------------- | ---------: | ----------: | ---------: | ----------: | ---------: | ----------: |
+| **A1**          | 0.7941     | **1.0000**  | 0.8292     | **1.0000**  | 0.7094     | 0.7683      |
+| A2              | 0.6552     | 0.9989      | 0.6567     | 0.9985      | 0.7672     | **1.0000**  |
+| A3              | 0.6552     | 1.0000      | 0.6556     | 1.0000      | 0.7693     | 1.0000      |
+| **A4**          | 0.7941     | **1.0000**  | 0.8287     | 1.0000      | **0.8839** | 1.0000      |
+| A4_nofb         | 0.7941     | 1.0000      | 0.8287     | 1.0000      | 0.8839     | 1.0000      |
+| A4_norerank     | 0.6552     | 1.0000      | 0.6556     | 1.0000      | 0.7693     | 1.0000      |
+| **A5**          | 0.7958     | 1.0000      | 0.8327     | 1.0000      | 0.7730     | 1.0000      |
+| A5_noproj       | **0.7958** | 1.0000      | **0.8328** | 1.0000      | 0.7730     | 1.0000      |
+| A5_norerank     | 0.5525     | 1.0000      | 0.5854     | 1.0000      | 0.6132     | 1.0000      |
+| **A6**          | 0.7958     | 1.0000      | 0.8325     | 1.0000      | 0.7108     | 0.7683      |
+| **A7**          | 0.7958     | 1.0000      | 0.8325     | 1.0000      | 0.7109     | 0.7683      |
+
+> **R@20 on S4** is the discriminator: A2/A3/A4/A5 all reach 1.000 (full
+> private fallback recovers everything), A6/A7/A1 cap at 0.768. At small k
+> (=5) A4 is the clear S4 winner (+17.5 pt over A1, +17.3 pt over A6/A7).
+
+---
+
+## Table 1d · Retrieval Quality — HotpotQA (37 025 ep, GoT, **Qwen text-embedding-v3**)
+
+> **Source:** `data/processed/got/hotpotqa/test/eval_v9_qwen_full_{k5,k10,k20}.json`.
+> Hotpot has no public-answer test split; its loader falls back to
+> `distractor_validation.parquet`. Wall: k=10 cold ≈ 4 h, k=5 / k=20
+> cache-warm ~30 min each.
+>
+> Per-subset N: **S1=5918, S2=11836, S3=11866, S4=7405**. Same caveat as
+> §1c on A2 cFMR (no `mem_rs_` entries built for Hotpot).
+
+### 1d.1 Recall@10 / MRR@10 (HEADLINE)
+
+| **Variant** | **S1 R@10** | **S2 R@10** | **S3 R@10** | **S4 R@10** | **S1 MRR@10** | **S2 MRR@10** | **S3 MRR@10** | **S4 MRR@10** | **S4 cFMR** | **Avg Savings** |
+| ----------- | ----------: | ----------: | ----------: | ----------: | ------------: | ------------: | ------------: | ------------: | ----------: | --------------: |
+| **A1** | 0.9994 | 0.9987 | 0.9995 | 0.7497 | 0.8546 | 0.7290 | 0.8588 | 0.6467 | 0.000 | 0% |
+| A2 | 0.9808 | 0.9658 | 0.9601 | 0.9773 | 0.8738 | 0.7673 | 0.8688 | **0.8605** | 0.000 | 72% |
+| A3 | 0.9824 | 0.9686 | 0.9659 | 0.9836 | 0.8687 | 0.7566 | 0.8635 | 0.8549 | 0.000 | 72% |
+| **A4** | **0.9999** | **0.9997** | 0.9994 | **0.9947** | 0.8230 | 0.7118 | 0.8397 | 0.7549 | 0.000 | 72% |
+| A4_nofb | 0.9999 | 0.9997 | 0.9994 | 0.9947 | 0.8158 | 0.7111 | 0.8387 | 0.7539 | 0.000 | 72% |
+| A4_norerank | 0.9824 | 0.9686 | 0.9659 | 0.9836 | 0.8687 | 0.7566 | 0.8635 | 0.8549 | 0.000 | 72% |
+| **A5** | 0.9995 | 0.9988 | **0.9995** | 0.9565 | 0.8666 | 0.8608 | 0.9244 | 0.7245 | 0.000 | 72% |
+| A5_noproj | 0.9995 | 0.9989 | 0.9995 | 0.9566 | **0.9448** | **0.9558** | **0.9725** | 0.7740 | 0.000 | 72% |
+| A5_norerank | 0.7416 | 0.7019 | 0.9356 | 0.7873 | 0.6705 | 0.7013 | 0.6378 | 0.5911 | 0.000 | 72% |
+| **A6** | 0.9995 | 0.9989 | 0.9995 | 0.7497 | 0.8649 | 0.8637 | 0.9242 | 0.6671 | 0.000 | 38% |
+| **A7** | 0.9995 | 0.9989 | 0.9995 | 0.7497 | 0.8635 | 0.8644 | 0.9242 | 0.6675 | 0.000 | 38% |
+| **A8** | (Stage B running) | | | | | | | | | |
+
+> Headline: **A4 lifts S4 R@10 from 0.750 (A1) → 0.995, Δ = +24.5 pt** —
+> the largest cross-dataset margin so far. A5_noproj is again the MRR
+> winner on S1/S2/S3 by a wide gap (+9 pt over A1 on S2 MRR). A4 and A5
+> agree on S1/S2/S3 R@10 within 0.05 pt; the meaningful split is the
+> S4-fallback choice.
+
+### 1d.2 Recall@5 / Recall@20
+
+| **Variant**     | **S1 R@5** | **S1 R@20** | **S2 R@5** | **S2 R@20** | **S4 R@5** | **S4 R@20** |
+| --------------- | ---------: | ----------: | ---------: | ----------: | ---------: | ----------: |
+| **A1**          | 0.9911     | **1.0000**  | 0.8739     | **1.0000**  | 0.7437     | 0.7500      |
+| A2              | 0.9274     | 1.0000      | 0.8228     | 1.0000      | 0.9271     | **1.0000**  |
+| A3              | 0.9274     | 1.0000      | 0.8127     | 1.0000      | 0.9293     | 1.0000      |
+| **A4**          | **0.9967** | 1.0000      | 0.8814     | 1.0000      | **0.9766** | 1.0000      |
+| A4_nofb         | 0.9967     | 1.0000      | 0.8812     | 1.0000      | 0.9766     | 1.0000      |
+| A4_norerank     | 0.9274     | 1.0000      | 0.8127     | 1.0000      | 0.9293     | 1.0000      |
+| **A5**          | 0.9921     | 1.0000      | 0.9010     | 1.0000      | 0.8247     | 1.0000      |
+| A5_noproj       | 0.9922     | 1.0000      | **0.9212** | 1.0000      | 0.8248     | 1.0000      |
+| A5_norerank     | 0.5077     | 1.0000      | 0.5129     | 1.0000      | 0.4258     | 1.0000      |
+| **A6**          | 0.9921     | 1.0000      | 0.8850     | 1.0000      | 0.7443     | 0.7500      |
+| **A7**          | 0.9920     | 1.0000      | 0.8848     | 1.0000      | 0.7443     | 0.7500      |
+
+> **Cross-dataset summary at R@10/S4 (Δ over A1)**: MuSiQue **+17.0 pt**,
+> 2Wiki **+21.3 pt**, Hotpot **+24.5 pt**. The lift increases monotonically
+> with the dataset's average distractor density — exactly the regime A4's
+> private fallback was designed for.
+
+---
+
 ## Table 2 · Main Results — 2WikiMultiHopQA (EM / F1)
 
 | **Method** | **S1 EM** | **S1 F1** | **S2 EM** | **S2 F1** | **S3 EM** | **S3 F1** |
@@ -329,14 +441,36 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 | **Method** | **MuSiQue FMR / cFMR** | **2Wiki FMR / cFMR** | **HotpotQA FMR / cFMR** | **GSM8K FMR / cFMR** | **MATH FMR / cFMR** |
 | ---------- | ---------------------- | -------------------- | ----------------------- | -------------------- | ------------------- |
-| **A1** | 0.000 / **0.000** | | | | |
-| **A2** | 1.000 / **0.341** | | | | |
-| **A3** | 1.000 / **0.000** | | | | |
-| **A4** | 1.000 / **0.000** | | | | |
-| **A5** | 1.000 / **0.000** | | | | |
-| **A6** | 0.000 / **0.000** | | | | |
-| **A7** | 0.000 / **0.000** | | | | |
-| **A8** | (pending) | | | | |
+| **A1** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
+| **A2** | 1.000 / **0.683** | 1.000 / 0.000 † | 1.000 / 0.000 † | | |
+| **A3** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
+| **A4** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
+| **A5** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
+| **A6** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
+| **A7** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
+| **A8** | 0.000 / **0.000** | (Stage B running) | (Stage B running) | | |
+
+> All numbers are S4-only at k=10 from the Qwen text-embedding-v3 evaluator.
+> MuSiQue value updated from earlier draft (A2 cFMR was misreported as 0.341
+> in v1; the correct k=10 number is **0.683**, taken from the current
+> `eval_v9_qwen_full_k10.json`).
+>
+> **† 2Wiki / Hotpot A2 cFMR caveat:** the current `RestrictedBuilder` only
+> populates `mem_rs_` entries when an interim restricted-evidence file
+> exists for the dataset (built once for MuSiQue under
+> `data/interim/musique/restricted_evidence/`). 2Wiki and Hotpot S4
+> episodes therefore contain only `mem_ws_/mem_ts_/mem_pr_` entries; A2's
+> shared bucket has no restricted memory it could leak, so cFMR is
+> mechanically 0 on both datasets. The MuSiQue **0.683** is the only
+> directly comparable A2 leak number; 2Wiki/Hotpot A2 cFMR will become
+> meaningful once the restricted-evidence interim is built for them
+> (tracked separately).
+>
+> Where it matters most — **A4/A5 cFMR is 0.000 on every dataset we have
+> tested**, including the one (MuSiQue) where the structural FMR is 1.000
+> *and* restricted entries exist in S4: i.e. the shared bucket is being
+> used aggressively (FMR=1) but never returns a restricted memory in the
+> top-k. This is the property the paper is built on.
 
 ---
 
