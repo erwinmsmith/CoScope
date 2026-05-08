@@ -155,7 +155,15 @@ class DatasetPipeline:
         out: List[Episode] = []
         with ProcessPoolExecutor(max_workers=max_workers) as pool:
             futures = [
-                pool.submit(_build_one, raw, dataset, split, gt, seed)
+                pool.submit(
+                    _build_one,
+                    raw,
+                    dataset,
+                    split,
+                    gt,
+                    seed,
+                    self.reasoning_path_type,
+                )
                 for raw, gt in tasks
             ]
             for fut in as_completed(futures):
@@ -247,12 +255,18 @@ def _build_one(
     split: str,
     target_graph_type: Union[str, GraphType],
     seed: int,
+    reasoning_path_type: str = "got",
 ) -> Optional[Dict[str, Any]]:
-    """Worker entry point used in the ProcessPoolExecutor path."""
+    """Worker entry point used in the ProcessPoolExecutor path.
+
+    The ``reasoning_path_type`` argument MUST be propagated from the parent
+    pipeline; otherwise workers fall back to the default ``got`` builder
+    and silently produce GoT episodes regardless of the configured rpt.
+    """
     from dataio.serializer import Serializer as _Ser
     from construction.episode_builder import EpisodeBuilder as _Builder
 
-    builder = _Builder()
+    builder = _Builder(reasoning_path_type=reasoning_path_type)
     ep = builder.build_episode(
         raw_item=raw,
         dataset=dataset,

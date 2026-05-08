@@ -39,6 +39,16 @@ DEFAULT_GRAPH_TYPES_BY_DATASET = {
     "math":            [GraphType.LINEAR, GraphType.FORK, GraphType.FORK_MERGE, GraphType.INDEPENDENT],
 }
 
+# CoT / ToT use a single fixed graph topology (LINEAR / FORK respectively).
+# Their wrapper builders (ChainBuilder / TreeBuilder) ignore ``target_graph_type``
+# and always emit the pinned topology, so iterating over the multi-type GoT
+# default would produce N identical duplicate episodes per raw_item under the
+# same episode_id. We collapse to a single representative target here.
+GRAPH_TYPES_BY_RPT_OVERRIDE = {
+    "cot": [GraphType.LINEAR],
+    "tot": [GraphType.FORK],
+}
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Full dataset construction")
@@ -68,15 +78,26 @@ def main() -> None:
         reasoning_path_type=args.reasoning_path_type,
     )
 
+    rpt = args.reasoning_path_type
+    rpt_override = GRAPH_TYPES_BY_RPT_OVERRIDE.get(rpt)
+
     for dataset in args.datasets:
-        base_types: List[GraphType] = list(
-            DEFAULT_GRAPH_TYPES_BY_DATASET.get(dataset, [GraphType.LINEAR])
-        )
+        if rpt_override is not None:
+            base_types: List[GraphType] = list(rpt_override)
+        else:
+            base_types = list(
+                DEFAULT_GRAPH_TYPES_BY_DATASET.get(dataset, [GraphType.LINEAR])
+            )
         for split in args.splits:
             target_types = list(base_types)
-            if args.include_s4 and split == "test":
+            # POLICY_ISOLATED (S4) is GoT-only by design: its scope/policy
+            # semantics depend on the GoT verifier-restricted contract.
+            # ToT (FORK) and CoT (LINEAR) wrappers ignore the target type
+            # anyway, so injecting POLICY_ISOLATED here would just produce
+            # additional duplicate FORK / LINEAR episodes.
+            if args.include_s4 and split == "test" and rpt_override is None:
                 target_types.append(GraphType.POLICY_ISOLATED)
-            print(f"=> {dataset}/{split}  graph_types={[t.value for t in target_types]}")
+            print(f"=> {dataset}/{split}  rpt={rpt}  graph_types={[t.value for t in target_types]}")
             written = pipeline.run(
                 dataset=dataset,
                 split=split,
