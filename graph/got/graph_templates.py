@@ -284,6 +284,61 @@ def build_graph(dataset: str, hop_count: int, graph_type: GraphType) -> GoTGraph
     return _finalize(nodes, edges, graph_type)
 
 
+# ============================================================
+# Public helpers exported for non-GoT reasoning-path wrappers
+# (CoT chain_builder / ToT tree_builder).
+#
+# The leading underscore on ``_build_*`` / ``_verifier`` / ``_finalize`` is
+# kept for backwards compatibility with code that already imports them via
+# their original names; the aliases below give a stable public surface that
+# external builders should prefer.
+# ============================================================
+
+build_linear_pattern = _build_linear
+build_fork_pattern = _build_fork
+build_merge_pattern = _build_merge
+build_fork_merge_pattern = _build_fork_merge
+build_independent_pattern = _build_independent
+make_verifier_node = _verifier
+finalize_graph = _finalize
+
+
+def build_policy_isolated(
+    base_pattern: Callable[[int], Tuple[List[GoTNode], List[GoTEdge]]],
+    hop_count: int,
+) -> GoTGraph:
+    """
+    Build a POLICY_ISOLATED-tagged graph on top of an arbitrary base topology.
+
+    The base pattern (e.g. ``build_linear_pattern``, ``build_fork_pattern``)
+    supplies the planner / solver structure; we then append a Verifier node
+    and tag the resulting graph as ``GraphType.POLICY_ISOLATED`` so that the
+    rest of the pipeline (subset_assigner, restricted_builder, policy
+    validator) recognises it as an S4 episode.
+
+    This is the common implementation behind:
+      - GoT POLICY_ISOLATED  (LINEAR base)
+      - CoT POLICY_ISOLATED  (LINEAR base, but rpt=CoT on the episode)
+      - ToT POLICY_ISOLATED  (FORK   base, rpt=ToT on the episode)
+    """
+    nodes, edges = base_pattern(hop_count)
+    nodes.append(_verifier())
+    return _finalize(nodes, edges, GraphType.POLICY_ISOLATED)
+
+
+__all__ = [
+    "build_graph",
+    "build_linear_pattern",
+    "build_fork_pattern",
+    "build_merge_pattern",
+    "build_fork_merge_pattern",
+    "build_independent_pattern",
+    "make_verifier_node",
+    "finalize_graph",
+    "build_policy_isolated",
+]
+
+
 def available_graph_types(dataset: str) -> List[GraphType]:
     """Return the graph types registered for a given dataset, plus POLICY_ISOLATED."""
     types = [gt for (ds, gt) in _BUILDERS.keys() if ds == dataset]

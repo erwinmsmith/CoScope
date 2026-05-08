@@ -90,12 +90,16 @@ def main() -> None:
             )
         for split in args.splits:
             target_types = list(base_types)
-            # POLICY_ISOLATED (S4) is GoT-only by design: its scope/policy
-            # semantics depend on the GoT verifier-restricted contract.
-            # ToT (FORK) and CoT (LINEAR) wrappers ignore the target type
-            # anyway, so injecting POLICY_ISOLATED here would just produce
-            # additional duplicate FORK / LINEAR episodes.
-            if args.include_s4 and split == "test" and rpt_override is None:
+            # POLICY_ISOLATED (S4) is supported by all three reasoning paths:
+            #   - GoT POLICY_ISOLATED  -> LINEAR base + Verifier (default)
+            #   - CoT POLICY_ISOLATED  -> LINEAR base + Verifier (rpt=CoT tag)
+            #   - ToT POLICY_ISOLATED  -> FORK   base + Verifier (rpt=ToT tag)
+            # The ToT / CoT wrappers (TreeBuilder / ChainBuilder) special-case
+            # this target value to build a verifier-augmented graph on top of
+            # their pinned base topology while preserving the POLICY_ISOLATED
+            # tag for the subset_assigner. See graph/tot/tree_builder.py and
+            # graph/cot/chain_builder.py for the rpt-S4 contract.
+            if args.include_s4 and split == "test":
                 target_types.append(GraphType.POLICY_ISOLATED)
             print(f"=> {dataset}/{split}  rpt={rpt}  graph_types={[t.value for t in target_types]}")
             written = pipeline.run(
