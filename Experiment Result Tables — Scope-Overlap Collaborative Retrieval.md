@@ -319,13 +319,23 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 | A5_norerank | 0.7416 | 0.7019 | 0.9356 | 0.7873 | 0.6705 | 0.7013 | 0.6378 | 0.5911 | 0.000 | 72% |
 | **A6** | 0.9995 | 0.9989 | 0.9995 | 0.7497 | 0.8649 | 0.8637 | 0.9242 | 0.6671 | 0.000 | 38% |
 | **A7** | 0.9995 | 0.9989 | 0.9995 | 0.7497 | 0.8635 | 0.8644 | 0.9242 | 0.6675 | 0.000 | 38% |
-| **A8** | (Stage B running) | | | | | | | | | |
+| **A8** | 0.9994 | 0.9987 | 0.9994 | 0.7497 | **0.8986** | **0.8837** | **0.9455** | **0.6914** | 0.000 | 38% |
 
 > Headline: **A4 lifts S4 R@10 from 0.750 (A1) → 0.995, Δ = +24.5 pt** —
-> the largest cross-dataset margin so far. A5_noproj is again the MRR
-> winner on S1/S2/S3 by a wide gap (+9 pt over A1 on S2 MRR). A4 and A5
-> agree on S1/S2/S3 R@10 within 0.05 pt; the meaningful split is the
+> the largest cross-dataset margin so far. A5_noproj is the MRR winner
+> on S1/S2/S3 by a wide gap (+9 pt over A1 on S2 MRR). A4 and A5 agree
+> on S1/S2/S3 R@10 within 0.05 pt; the meaningful split is the
 > S4-fallback choice.
+>
+> **A8 (query_intent rerank) — Stage B done (37 025 ep, qwen-plus, 32
+> workers, wall 161 min A8 eval after 14 h cold query_intent gen).**
+> Source: `data/processed/got/hotpotqa/test_qi/eval_v9_qwen_a8_k10.json`.
+> Same pattern as MuSiQue §1b: A8 R@10 ≡ A6/A7 (same stage-1 candidates),
+> but the LLM-generated `query_intent` rerank produces **MRR boost of
+> +4.4 / +15.5 / +8.7 / +4.5 pt on S1/S2/S3/S4 over A1** — i.e. the
+> correct memory is pushed earlier in the top-10. S2 (+15.5 pt) is
+> especially strong on Hotpot, consistent with Hotpot's notoriously
+> distractor-heavy partial-overlap setting.
 
 ### 1d.2 Recall@5 / Recall@20
 
@@ -448,7 +458,7 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 | **A5** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
 | **A6** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
 | **A7** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
-| **A8** | 0.000 / **0.000** | (Stage B running) | (Stage B running) | | |
+| **A8** | 0.000 / **0.000** | (Stage B A8 eval running) | 0.000 / **0.000** | | |
 
 > All numbers are S4-only at k=10 from the Qwen text-embedding-v3 evaluator.
 > MuSiQue value updated from earlier draft (A2 cFMR was misreported as 0.341
