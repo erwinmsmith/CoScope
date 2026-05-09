@@ -360,6 +360,81 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 ---
 
+## Table 1e · Retrieval Quality — MuSiQue ToT (4834 ep, **Qwen text-embedding-v3**, k=10)
+
+> **ToT scope** — same MuSiQue test items, but each raw item is wrapped in a
+> ToT FORK graph (one fan-out from the Planner over k sub-question solvers,
+> no merge node). With `--include-s4`, every raw item additionally produces
+> a `POLICY_ISOLATED` shard (FORK base + Verifier holding `mem_rs_*`
+> evidence), so we get 2 417 FORK + 2 417 POLICY_ISOLATED = 4 834 episodes.
+>
+> Subset distribution under ToT FORK is **bimodal** (S1=1 164, S2=1, S3=1 252):
+> the fan-out rarely produces partial-overlap branches, so MuSiQue ToT lands
+> in S1 (shared workspace) or S3 (independent branches). S2 is therefore
+> reported but statistically inert (n=1). S4 (n=2 417) is fully populated
+> and structurally identical to the GoT-S4 contract (Verifier holds the
+> only restricted evidence).
+>
+> Compare with §1b (GoT, same dataset / embedder / k) to read off the
+> structure-orthogonality claim.
+
+### 1e.1 Recall@10 / MRR@10 (HEADLINE)
+
+| **Variant**     | **S1 R@10** | **S3 R@10** | **S4 R@10** | **S1 MRR** | **S3 MRR** | **S4 MRR** |
+| --------------- | ----------: | ----------: | ----------: | ---------: | ---------: | ---------: |
+| **A1**          | 0.9795      | 0.9981      | 0.7851      | 0.8770     | 0.8032     | 0.6678     |
+| A2              | 0.6095      | 0.7838      | 0.5748      | 0.6610     | 0.6981     | 0.5685     |
+| A3              | 0.6817      | 0.7914      | 0.7355      | 0.7171     | 0.6981     | 0.6634     |
+| **A4**          | **0.9992**  | 0.9980      | **0.9209**  | 0.8536     | 0.7873     | **0.7009** |
+| A4_nofb         | 0.9992      | 0.9980      | 0.9207      | 0.8536     | 0.7873     | 0.7007     |
+| A4_norerank     | 0.6817      | 0.7914      | 0.7355      | 0.7171     | 0.6981     | 0.6634     |
+| **A5**          | 0.9853      | 0.9985      | 0.8559      | 0.8805     | 0.8049     | 0.6928     |
+| A5_noproj       | 0.9816      | 0.9981      | 0.8721      | 0.8805     | 0.8049     | 0.6981     |
+| A5_norerank     | 0.4229      | 0.4899      | 0.4507      | 0.5385     | 0.3473     | 0.4427     |
+| **A6**          | 0.9885      | 0.9981      | 0.7887      | **0.8805** | 0.8049     | 0.6699     |
+| **A7**          | 0.9885      | 0.9981      | 0.7887      | 0.8805     | 0.8049     | 0.6699     |
+
+> S2 is omitted from the headline table because n=1 makes the cell
+> meaningless; the JSON report still carries it.
+
+### 1e.2 Privacy on S4 — FMR / cFMR (n=2 417)
+
+| **Variant**     | **FMR** | **cFMR** |
+| --------------- | ------: | -------: |
+| **A1**          | 0.000   | 0.000    |
+| A2              | 0.000   | **0.5197** |
+| A3              | 1.000   | 0.000    |
+| **A4**          | 1.000   | 0.000    |
+| A4_nofb         | 1.000   | 0.000    |
+| A4_norerank     | 1.000   | 0.000    |
+| A5              | 1.000   | 0.000    |
+| A5_noproj       | 1.000   | 0.000    |
+| A5_norerank     | 1.000   | 0.000    |
+| **A6**          | 0.000   | 0.000    |
+| **A7**          | 0.000   | 0.000    |
+
+> ToT-S4 reproduces the GoT-S4 privacy ledger almost exactly:
+> A2 (force-merge, no scope buckets) leaks **52.0 %** of restricted content,
+> while every scope-aware variant (A3 onward) keeps **cFMR = 0**. FMR is the
+> noisy metric that fires whenever a non-shared bucket lookup returns a
+> hit — it does not imply leakage; cFMR is the contentful metric.
+
+### 1e.3 ToT vs GoT Δ at A4 (MuSiQue, R@10)
+
+| **Subset** | **GoT A4 (ref §1b)** | **ToT A4-ToT** | **Δ (ToT − GoT)** |
+| ---------- | -------------------: | -------------: | ----------------: |
+| S1         | 0.972                | **0.999**      | **+2.7 pt**       |
+| S3         | 0.964                | **0.998**      | **+3.4 pt**       |
+| S4         | 0.918                | **0.921**      | +0.3 pt           |
+
+> Headline: A4 transfers cleanly to ToT. The S1/S3 lift is consistent with
+> the FORK fan-out producing semantically tighter per-branch queries (each
+> solver only handles its own sub-question), and the S4 lift is essentially
+> zero — exactly what we want, because S4 quality is bottlenecked by the
+> private-fallback retriever (independent of structure).
+
+---
+
 ## Table 2 · Main Results — 2WikiMultiHopQA (EM / F1)
 
 | **Method** | **S1 EM** | **S1 F1** | **S2 EM** | **S2 F1** | **S3 EM** | **S3 F1** |
@@ -621,9 +696,10 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 | CoT (A4-CoT) | S1 | | * | * | | | | |
 | CoT (A4-CoT) | S2 | | * | * | | | | |
 | CoT (A4-CoT) | S3 | | * | * | | | | |
-| ToT (A4-ToT) | S1 | | * | * | | | | |
-| ToT (A4-ToT) | S2 | | * | * | | | | |
-| ToT (A4-ToT) | S3 | | * | * | | | | |
+| **ToT (A4-ToT)** | S1 | 0.43 | * | * | 0.999 | 0.854 | | |
+| **ToT (A4-ToT)** | S2 | 0.15 | * | * | 1.000 | 1.000 | | |
+| **ToT (A4-ToT)** | S3 | 0.00 | * | * | 0.998 | 0.787 | | |
+| **ToT (A4-ToT)** | S4 | — | * | * | 0.921 | 0.701 | | |
 
 ---
 
@@ -634,8 +710,10 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 | **Structure** | **S1 count** | **S1 ρ_mean** | **S2 count** | **S2 ρ_mean** | **S3 count** | **S3 ρ_mean** |
 | ------------- | ------------ | ------------- | ------------ | ------------- | ------------ | ------------- |
 | GoT | | | | | | |
-| ToT | | | | | | |
+| **ToT** | **1164** | **0.430** | **1** | **0.150** | **1252** | **0.000** |
 | CoT | | | | | | |
+
+> ToT MuSiQue/test (n=2417 non-S4 episodes, FORK structure): ρ distribution is bimodal — almost all episodes land in S1 (high overlap, sub-question solver branches share most workspace context) or S3 (independent branches, ρ=0). The single S2 hit suggests the FORK fan-out rarely produces partial overlap. Compare with GoT below.
 
 ---
 

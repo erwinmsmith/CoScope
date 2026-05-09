@@ -14,6 +14,9 @@
 #   WORKERS    build-side parallelism (default 8)
 #   VARIANTS   space-separated list (default: a1 a2 a3 a4 a4_nofb
 #              a4_norerank a5 a5_noproj a5_norerank a6 a7)
+#   INCLUDE_S4 1 to also build POLICY_ISOLATED test shard (default 0).
+#              Supported for all rpts (got/cot/tot) since the rpt-S4
+#              contract was lifted; see TreeBuilder/ChainBuilder.
 #
 # Notes:
 #   * Build is CPU-only and does not call any embedding API.
@@ -24,8 +27,6 @@
 #     embeddings cached during the GoT runs are reused unchanged.
 #     Only new query strings (per-agent retrieval queries derived
 #     from the rpt-specific graph topology) trigger fresh API calls.
-#   * For ToT/CoT, no S4 (POLICY_ISOLATED) shards are produced
-#     because S4's restricted-evidence contract is GoT-specific.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -40,6 +41,11 @@ export PYTHONHASHSEED=0
 K="${K:-10}"
 WORKERS="${WORKERS:-8}"
 VARIANTS="${VARIANTS:-a1 a2 a3 a4 a4_nofb a4_norerank a5 a5_noproj a5_norerank a6 a7}"
+INCLUDE_S4="${INCLUDE_S4:-0}"
+S4_FLAG=""
+if [[ "${INCLUDE_S4}" == "1" ]]; then
+  S4_FLAG="--include-s4"
+fi
 
 PROC_DIR="data/processed"
 SHARD_DIR="${PROC_DIR}/${RPT}/${DATASET}/test"
@@ -63,6 +69,7 @@ else
     --reasoning-path-type "${RPT}" \
     --processed-dir "${PROC_DIR}" \
     --max-workers "${WORKERS}" \
+    ${S4_FLAG} \
     --no-enforce-coverage \
     --log-level WARNING 2>&1 | tee -a "$LOG"
   echo "[build] done in $(( $(date +%s) - T0 ))s" | tee -a "$LOG"
