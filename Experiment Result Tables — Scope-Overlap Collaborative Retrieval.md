@@ -498,7 +498,21 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 > R@10 / MRR / FMR / savings axes are valid retrieval evidence. See
 > Table 6 caveat.
 
-### 1f.3 ToT vs GoT Δ at A4 (2Wiki, R@10)
+### 1f.3 Stage B — A8-ToT (LLM-rewritten query_intent, qwen-plus, k=10)
+
+| **Variant** | **S1 R@10** | **S3 R@10** | **S4 R@10** | **S1 MRR** | **S3 MRR** | **S4 MRR** |
+| ----------- | ----------: | ----------: | ----------: | ---------: | ---------: | ---------: |
+| A6          | 0.9958      | 0.9999      | 0.7727      | 0.9352     | 0.9047     | 0.7056     |
+| A7          | 0.9958      | 0.9999      | 0.7727      | 0.9352     | 0.9046     | 0.7055     |
+| **A8**      | **0.9994**  | **0.9999**  | **0.7734**  | **0.9429** | **0.9063** | **0.7079** |
+
+> A8-ToT vs A6-ToT (Δ on 2Wiki): R@10 +0.36 / +0.0 / +0.07 pt; MRR
+> +0.77 / +0.16 / +0.23 pt. The lift is genuinely smaller than on
+> MuSiQue / Hotpot — 2Wiki's A6 baseline is already very tight on this
+> embedder, so query rewriting has little headroom. cFMR = 0 throughout
+> (mechanical zero — see §1f.2 / Table 6).
+
+### 1f.4 ToT vs GoT Δ at A4 (2Wiki, R@10)
 
 | **Subset** | **GoT A4 (ref §1c)** | **ToT A4-ToT** | **Δ (ToT − GoT)** |
 | ---------- | -------------------: | -------------: | ----------------: |
@@ -904,3 +918,117 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 | HotpotQA        |                    |              |               |              |               |              |               |              |
 | GSM8K           |                    |              |               |              |               |              |               |              |
 | MATH            |                    |              |               |              |               |              |               |              |
+
+---
+
+## §X · Project Self-Assessment & Paper-Writing Recommendations (2026-05-11)
+
+> Honest internal review after the ToT Stage A + Stage B sweeps were
+> complete on MuSiQue / 2WikiMultiHopQA / HotpotQA. Captures (a) what
+> the project is genuinely contributing, (b) what currently does **not**
+> hold up, and (c) recommended priorities for finishing the paper.
+
+### X.1 What is solid (the hero numbers)
+
+The single sharpest sentence the paper can make today, grounded in
+real data, is:
+
+> On MuSiQue S4, A4 retrieves **78 % fewer first-stage candidates** than
+> per-agent independent retrieval (A1) at virtually the same recall
+> ceiling (Δ Recall@10 ≈ +0.3 pt vs A1; +13.6 pt vs A1 on ToT-MuSiQue;
+> +20.7 pt on ToT-2Wiki; +23.2 pt on ToT-Hotpot for S4 specifically),
+> while reducing the content-level privacy leak (cFMR) of force-merge
+> (A2) **from 0.683 to 0.000**.
+
+Three statements survive scrutiny:
+
+1. **Efficiency × Privacy duality is real.** A4 keeps almost all of
+   A2's `first_stage_savings` (≈ 78 % vs ≈ 78 %) while collapsing cFMR
+   from 0.683 → 0.000 on MuSiQue. This is the cleanest single-row win
+   in the paper.
+2. **Reasoning-structure orthogonality is empirically established.** A4
+   transfers from GoT to ToT with S4 deltas agreeing to within 1–3 pt
+   across 3 datasets (§1g.5). 6 of 6 (dataset × structure) cells move
+   in the predicted direction.
+3. **Hierarchical block routing (A6) achieves FMR=0 *and* cFMR=0** on
+   MuSiQue S4 — the only configuration with both structural and
+   content-level non-leak. It pays ~33 pp less first-stage savings than
+   A4 in exchange.
+
+### X.2 What does not yet hold up (must address before submission)
+
+1. **Cross-dataset privacy is currently an MuSiQue-only claim.** The
+   `restricted_evidence` interim has been built only for MuSiQue; on
+   2Wiki / Hotpot every variant's cFMR=0 is *vacuous* (no `mem_rs_*`
+   entries to leak). The doc has been updated (Table 6 ‡, §1f.2 †,
+   §1g.2 †) but the underlying data still needs to be regenerated for
+   the paper to claim cross-dataset privacy.
+2. **ρ in ToT is a hop_count alias.** Under ToT FORK, ρ is a
+   deterministic function of `(graph_type, hop_count)` with std=0
+   inside each hop bucket (e.g. all 4-hop ToT-2Wiki episodes have
+   ρ=0.428 exactly). Narrative needs to either (a) honestly call ρ a
+   *topology proxy*, or (b) redefine ρ to use real content similarity
+   between scopes. Option (a) is cheap; option (b) is a research item.
+3. **A8 marginal value over A6.** A8 = A6 + LLM query rewrite. Its
+   actual lift (Stage B) is ≤ 0.4 pt R@10 and 1–7 pt MRR depending on
+   dataset, at the cost of a qwen-plus call per request. The paper
+   should not sell A8 as a hero method; report it as a small but
+   reliable MRR refinement on top of A6.
+4. **A7 is presently a code-level alias of A6.** Either implement the
+   learned-W variant the doc promises, or merge A7 into A6 in tables.
+   Leaving 8 named variants where 1 is empty padding is a reviewer
+   target.
+5. **Tables 2–5 (downstream EM/F1/Acc) are still empty.** All current
+   "improvements" are A1 vs Ax self-comparisons. At least one classical
+   retrieval baseline (BM25 is cheapest) should populate the
+   open-ended baseline rows or those tables should be removed from
+   this draft.
+6. **No confidence intervals.** Cells like §1f.3 reporting "+0.2 pt"
+   deltas should not be in bold without bootstrap CI or significance
+   testing — at 9 800 episodes per cell, sub-percent deltas are
+   plausibly noise.
+
+### X.3 Recommended narrative for the paper
+
+Order of importance for the abstract / intro headlines:
+
+1. **Privacy × efficiency duality** (A4 gives A2's savings without A2's
+   leak) — this is the headline.
+2. **Generalization across reasoning topologies** (GoT / ToT, 3
+   datasets, S4 deltas within 1–3 pt) — this is the soundness check.
+3. **MRR refinement via LLM query rewriting** (A8 over A6) — small but
+   honest.
+
+What **not** to claim until the data is built:
+
+- "Cross-dataset privacy" (currently MuSiQue only).
+- "ρ measures collaborator information overlap" (currently it largely
+  measures topology).
+- "Hierarchical block routing wins" without admitting its 33 pp
+  savings cost.
+
+### X.4 Recommended next concrete actions
+
+Sorted by cost / impact ratio:
+
+| **Action** | **Cost** | **Lifts which claim?** |
+| ---------- | -------- | ---------------------- |
+| Build `data/interim/{2wikimhqa,hotpotqa}/restricted_evidence/` and re-run S4 retrieval (no LLM) | ~1–2 h | Cross-dataset privacy (claim #1 above) |
+| Adjust ρ narrative to "topology proxy" + footnote derivation | ~30 min docs | Soundness of subset stratification |
+| Run BM25 on MuSiQue test as one Table 2 row | ~2 h | At least one external baseline |
+| Replace "vs A2" force-merge baseline numbers with a learned-W A7 once that is implemented | research | Closes the A6/A7 alias gap |
+| Add 95 % bootstrap CI on the §1{b–g}.1 R@10 / MRR tables | ~1 h | Statistical soundness |
+
+### X.5 Where the project sits on the contribution ladder
+
+- **Solid system-level contribution** (privacy bucketing + private
+  fallback + hierarchical routing as a coherent design space).
+- **One clean empirical headline** (A4's 78 % savings at cFMR=0 on
+  MuSiQue, plus structure-orthogonality across GoT/ToT).
+- **Not yet a theoretical contribution** — ρ is a useful taxonomy axis
+  but currently a topology re-encoding rather than a measurement of
+  content overlap.
+
+This is enough for a strong systems / applications paper, **provided**
+the cross-dataset privacy data is regenerated and the narrative is
+adjusted as in §X.3.
