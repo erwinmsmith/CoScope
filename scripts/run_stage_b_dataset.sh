@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Stage B for 2Wiki + Hotpot: generate Step-2 query_intent with qwen-plus,
-# then run A8 / A6 / A7 retrieval evaluation at k=10. Designed to be invoked
-# with DATASET= as the only knob; cache (text-embedding-v3 SQLite) is shared
-# with the MuSiQue runs.
+# Stage B: generate Step-2 query_intent with qwen-plus, then run
+# A8 / A6 / A7 retrieval evaluation at k=10. Cache (text-embedding-v3
+# SQLite) is shared across rpts and datasets.
 #
 # Usage:
-#   DATASET=2wikimhqa bash scripts/run_stage_b_dataset.sh
-#   DATASET=hotpotqa  bash scripts/run_stage_b_dataset.sh
+#   DATASET=2wikimhqa             bash scripts/run_stage_b_dataset.sh   # default RPT=got
+#   DATASET=hotpotqa  RPT=tot     bash scripts/run_stage_b_dataset.sh
+#   DATASET=musique   RPT=tot     bash scripts/run_stage_b_dataset.sh
+#
+# RPT defaults to 'got' for back-compat. Source shards must already exist
+# under data/processed/${RPT}/${DATASET}/test (built by run_stage_a_rpt.sh
+# with --include-s4 if A8 should cover S4).
 
 set -euo pipefail
 cd /home/ninghanwen/lixin/CoScope
@@ -16,17 +20,21 @@ conda activate zhenke
 set -a; source .env; set +a
 export PYTHONHASHSEED=0
 
-DATASET="${DATASET:?DATASET env var required (e.g. 2wikimhqa, hotpotqa)}"
+DATASET="${DATASET:?DATASET env var required (e.g. musique, 2wikimhqa, hotpotqa)}"
+RPT="${RPT:-got}"
 SPLIT=test
-SRC=data/processed/got/${DATASET}/${SPLIT}
-OUT=data/processed/got/${DATASET}/${SPLIT}_qi
+SRC=data/processed/${RPT}/${DATASET}/${SPLIT}
+OUT=data/processed/${RPT}/${DATASET}/${SPLIT}_qi
 mkdir -p "$OUT" logs
 
 TS=$(date +%Y%m%d_%H%M%S)
-LOG=logs/stage_b_${DATASET}_${TS}.log
+LOG=logs/stage_b_${RPT}_${DATASET}_${TS}.log
 
 echo "=== Stage B query_intent start: $(date) ===" | tee -a "$LOG"
-echo "dataset=$DATASET  src=$SRC  out=$OUT  workers=32" | tee -a "$LOG"
+echo "rpt=$RPT  dataset=$DATASET  src=$SRC  out=$OUT  workers=32" | tee -a "$LOG"
+if [[ ! -d "$SRC" ]]; then
+  echo "ERROR: source shard dir does not exist: $SRC" | tee -a "$LOG"; exit 1
+fi
 T0=$(date +%s)
 
 SHARDS=$(ls "$SRC"/s*.jsonl | tr '\n' ' ')
