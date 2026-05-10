@@ -484,16 +484,19 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 | **Variant**     | **FMR** | **cFMR** |
 | --------------- | ------: | -------: |
-| A1              | 0.000   | 0.000    |
+| A1              | 0.000   | 0.000 †  |
 | A2              | 1.000   | 0.000 †  |
-| A3 / A4 / A5    | 1.000   | 0.000    |
-| A4_nofb / norerank | 1.000 | 0.000    |
-| A6 / A7         | 0.000   | 0.000    |
+| A3 / A4 / A5    | 1.000   | 0.000 †  |
+| A4_nofb / norerank | 1.000 | 0.000 †  |
+| A6 / A7         | 0.000   | 0.000 †  |
 
-> † A2 cFMR is mechanically 0 on 2Wiki because the
-> `data/interim/2wikimhqa/restricted_evidence/` interim is not yet built;
-> the S4 shard contains no `mem_rs_` entries A2 could leak. See Table 6
-> caveat.
+> † **All cFMR values on 2Wiki are mechanically 0** because
+> `data/interim/2wikimhqa/restricted_evidence/` has not been built yet;
+> S4 shards contain no `mem_rs_` entries to leak. This applies to A2
+> (which would otherwise leak) **and** to A4 / A5 (which would otherwise
+> protect). The cFMR axis on 2Wiki is therefore un-verified — only the
+> R@10 / MRR / FMR / savings axes are valid retrieval evidence. See
+> Table 6 caveat.
 
 ### 1f.3 ToT vs GoT Δ at A4 (2Wiki, R@10)
 
@@ -547,13 +550,16 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 | **Variant**     | **FMR** | **cFMR** |
 | --------------- | ------: | -------: |
-| A1              | 0.000   | 0.000    |
+| A1              | 0.000   | 0.000 †  |
 | A2              | 1.000   | 0.000 †  |
-| A3 / A4 / A5    | 1.000   | 0.000    |
-| A4_nofb / norerank | 1.000 | 0.000    |
-| A6 / A7         | 0.000   | 0.000    |
+| A3 / A4 / A5    | 1.000   | 0.000 †  |
+| A4_nofb / norerank | 1.000 | 0.000 †  |
+| A6 / A7         | 0.000   | 0.000 †  |
 
-> † Same restricted-evidence-not-built caveat as 2Wiki applies (see §1f.2 / Table 6).
+> † **All cFMR values on Hotpot are mechanically 0** for the same
+> reason as 2Wiki (§1f.2): no `mem_rs_` entries until the
+> `data/interim/hotpotqa/restricted_evidence/` interim is built.
+> Privacy axis is un-verified on Hotpot.
 
 ### 1g.3 Stage B — A8-ToT (LLM-rewritten query_intent, qwen-plus, k=10)
 
@@ -683,36 +689,48 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 | **Method** | **MuSiQue FMR / cFMR** | **2Wiki FMR / cFMR** | **HotpotQA FMR / cFMR** | **GSM8K FMR / cFMR** | **MATH FMR / cFMR** |
 | ---------- | ---------------------- | -------------------- | ----------------------- | -------------------- | ------------------- |
-| **A1** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
-| **A2** | 1.000 / **0.683** | 1.000 / 0.000 † | 1.000 / 0.000 † | | |
-| **A3** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
-| **A4** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
-| **A5** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
-| **A6** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
-| **A7** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
-| **A8** | 0.000 / **0.000** | (Stage B A8 eval running) | 0.000 / **0.000** | | |
+| **A1** | 0.000 / **0.000** | 0.000 / 0.000 ‡ | 0.000 / 0.000 ‡ | | |
+| **A2** | 1.000 / **0.683** | 1.000 / 0.000 ‡ | 1.000 / 0.000 ‡ | | |
+| **A3** | 1.000 / **0.000** | 1.000 / 0.000 ‡ | 1.000 / 0.000 ‡ | | |
+| **A4** | 1.000 / **0.000** | 1.000 / 0.000 ‡ | 1.000 / 0.000 ‡ | | |
+| **A5** | 1.000 / **0.000** | 1.000 / 0.000 ‡ | 1.000 / 0.000 ‡ | | |
+| **A6** | 0.000 / **0.000** | 0.000 / 0.000 ‡ | 0.000 / 0.000 ‡ | | |
+| **A7** | 0.000 / **0.000** | 0.000 / 0.000 ‡ | 0.000 / 0.000 ‡ | | |
+| **A8** | 0.000 / **0.000** | (Stage B A8 eval running) | 0.000 / 0.000 ‡ | | |
+
+> ‡ = mechanically 0 because the dataset's restricted-evidence interim
+> has not been built yet (see scope warning below). Only MuSiQue cFMR
+> values are real privacy evidence at the moment.
 
 > All numbers are S4-only at k=10 from the Qwen text-embedding-v3 evaluator.
 > MuSiQue value updated from earlier draft (A2 cFMR was misreported as 0.341
 > in v1; the correct k=10 number is **0.683**, taken from the current
 > `eval_v9_qwen_full_k10.json`).
 >
-> **† 2Wiki / Hotpot A2 cFMR caveat:** the current `RestrictedBuilder` only
-> populates `mem_rs_` entries when an interim restricted-evidence file
-> exists for the dataset (built once for MuSiQue under
-> `data/interim/musique/restricted_evidence/`). 2Wiki and Hotpot S4
-> episodes therefore contain only `mem_ws_/mem_ts_/mem_pr_` entries; A2's
-> shared bucket has no restricted memory it could leak, so cFMR is
-> mechanically 0 on both datasets. The MuSiQue **0.683** is the only
-> directly comparable A2 leak number; 2Wiki/Hotpot A2 cFMR will become
-> meaningful once the restricted-evidence interim is built for them
-> (tracked separately).
+> **⚠ Privacy claim scope: MuSiQue is the only dataset whose
+> `data/interim/.../restricted_evidence/` interim has been built so far.**
+> The `RestrictedBuilder` populates `mem_rs_` entries only when the
+> interim file exists; without it, S4 episodes contain only
+> `mem_ws_ / mem_ts_ / mem_pr_` entries, so any cFMR computed against
+> "restricted gold" is **mechanically 0** because there is nothing
+> restricted to leak. This applies to **both** the leaky variants (A2)
+> and the protective variants (A4 / A5 / A6 / A8) on 2Wiki and Hotpot.
 >
-> Where it matters most — **A4/A5 cFMR is 0.000 on every dataset we have
-> tested**, including the one (MuSiQue) where the structural FMR is 1.000
-> *and* restricted entries exist in S4: i.e. the shared bucket is being
-> used aggressively (FMR=1) but never returns a restricted memory in the
-> top-k. This is the property the paper is built on.
+> Therefore:
+> * **MuSiQue cFMR** numbers are real privacy evidence: A2 leaks 68 % of
+>   restricted content; A4 / A5 / A6 / A8 leak 0 %. This single dataset
+>   already establishes the scope-bucket / private-fallback contract.
+> * **2Wiki / Hotpot cFMR=0** entries above are *vacuously* 0 — they
+>   confirm no leak only because no restricted gold exists in those
+>   shards. They do **not** independently corroborate the privacy claim.
+>   The R@10 / MRR / FMR numbers on these datasets are still valid as
+>   retrieval-quality measurements; only the privacy axis is
+>   un-verified.
+>
+> To upgrade 2Wiki / Hotpot from "vacuous 0" to "real evidence", the
+> restricted-evidence interim must be built for them and the S4 shard
+> rebuilt; only the S4 retrieval eval has to be re-run, no LLM calls.
+> Tracked as **TODO** below the table.
 
 ---
 

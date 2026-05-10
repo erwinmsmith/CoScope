@@ -201,7 +201,7 @@ def _generate_intent_for_request(
         raw_item=raw_item,
         node=node,
         prior_conclusions=prior,
-        reasoning_path_type=ReasoningPathType.GOT,
+        reasoning_path_type=getattr(episode, "reasoning_path_type", ReasoningPathType.GOT),
     )
     text = _call_llm_with_retry(llm, prompt)
     if text:
@@ -293,7 +293,7 @@ def _prepare_task(
         raw_item=raw_item,
         node=node,
         prior_conclusions=prior,
-        reasoning_path_type=ReasoningPathType.GOT,
+        reasoning_path_type=getattr(episode, "reasoning_path_type", ReasoningPathType.GOT),
     )
     return (request, raw_item, role, node, prompt)
 
@@ -419,6 +419,20 @@ def _process_shards(
             f"batch_size={batch_size}", flush=True,
         )
 
+    # Pre-count total episodes across all shards so the ETA divisor is correct
+    # for any (rpt, dataset) combination instead of the legacy 12085 hardcode.
+    total_episodes = 0
+    for shard_path in shards:
+        with shard_path.open("r", encoding="utf-8") as fh:
+            for _ in fh:
+                total_episodes += 1
+    if max_episodes is not None:
+        total_episodes = min(total_episodes, max_episodes)
+    print(
+        f"[generate_query_intent] total episodes to process: {total_episodes}",
+        flush=True,
+    )
+
     t0 = time.perf_counter()
     episode_count = 0
     try:
@@ -446,9 +460,10 @@ def _process_shards(
                     buffer.clear()
                     elapsed = time.perf_counter() - t0
                     rate = episode_count / max(elapsed, 1e-3)
-                    eta = (12085 - episode_count) / max(rate, 1e-3) / 60.0
+                    remaining = max(total_episodes - episode_count, 0)
+                    eta = remaining / max(rate, 1e-3) / 60.0
                     print(
-                        f"[generate_query_intent] ep={episode_count} "
+                        f"[generate_query_intent] ep={episode_count}/{total_episodes} "
                         f"req={stats.total_requests} "
                         f"ok={stats.generated} fb={stats.template_fallback} "
                         f"skip={stats.skipped_no_raw} "
