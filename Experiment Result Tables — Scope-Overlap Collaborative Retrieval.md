@@ -419,7 +419,26 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 > noisy metric that fires whenever a non-shared bucket lookup returns a
 > hit — it does not imply leakage; cFMR is the contentful metric.
 
-### 1e.3 ToT vs GoT Δ at A4 (MuSiQue, R@10)
+### 1e.3 Stage B — A8-ToT (LLM-rewritten query_intent, qwen-plus, k=10)
+
+| **Variant** | **S1 R@10** | **S3 R@10** | **S4 R@10** | **S1 MRR** | **S3 MRR** | **S4 MRR** |
+| ----------- | ----------: | ----------: | ----------: | ---------: | ---------: | ---------: |
+| A6          | 0.9885      | 0.9981      | 0.7887      | 0.8805     | 0.8049     | 0.6699     |
+| A7          | 0.9886      | 0.9981      | 0.7887      | 0.8805     | 0.8049     | 0.6699     |
+| **A8**      | **0.9911**  | **0.9985**  | **0.7898**  | **0.9110** | **0.8744** | **0.7086** |
+
+> **A8-ToT vs A6-ToT (Δ MRR)**: S1 +3.05 pt, S3 **+6.95 pt**, S4 +3.87 pt.
+> Recall is essentially saturated at the A6 ceiling under hierarchical
+> block routing; A8's LLM-rewritten `query_intent` mainly improves
+> ranking quality (MRR), exactly as predicted by the design.
+>
+> Note that A8/A6/A7 all cap S4 R@10 at ~0.79 because hierarchical block
+> routing does not aggressively use the private-fallback retriever — A4
+> remains the S4-recall champion (0.921). A8's value-add is on top of
+> A6's policy-aware routing, where it tightens MRR by ~3-7 pt.
+> Privacy: cFMR = 0.000 on every (variant, subset) under A8/A6/A7 (Stage B).
+
+### 1e.4 ToT vs GoT Δ at A4 (MuSiQue, R@10)
 
 | **Subset** | **GoT A4 (ref §1b)** | **ToT A4-ToT** | **Δ (ToT − GoT)** |
 | ---------- | -------------------: | -------------: | ----------------: |
@@ -536,7 +555,18 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 > † Same restricted-evidence-not-built caveat as 2Wiki applies (see §1f.2 / Table 6).
 
-### 1g.3 ToT vs GoT Δ at A4 (Hotpot, R@10)
+### 1g.3 Stage B — A8-ToT (LLM-rewritten query_intent, qwen-plus, k=10)
+
+| **Variant** | **S3 R@10** | **S4 R@10** | **S3 MRR** | **S4 MRR** |
+| ----------- | ----------: | ----------: | ---------: | ---------: |
+| A6          | 0.9992      | 0.7494      | 0.8707     | 0.6528     |
+| A7          | 0.9992      | 0.7494      | 0.8683     | 0.6508     |
+| **A8**      | 0.9990      | 0.7493      | **0.8855** | **0.6635** |
+
+> Same pattern as MuSiQue: A8 leaves R@10 at the A6 ceiling and lifts MRR
+> (+1.48 pt S3, +1.07 pt S4). cFMR = 0 throughout.
+
+### 1g.4 ToT vs GoT Δ at A4 (Hotpot, R@10)
 
 | **Subset** | **GoT A4 (ref §1d)** | **ToT A4-ToT** | **Δ (ToT − GoT)** |
 | ---------- | -------------------: | -------------: | ----------------: |
@@ -546,7 +576,7 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 > A4-ToT lifts S4 by **+23.2 pt** over A1-ToT (Hotpot S4 baseline 0.749 →
 > 0.982), again matching GoT's +24.5 pt to within 1.3 pt.
 
-### 1g.4 Cross-dataset summary — ToT A4 Δ over A1 on S4
+### 1g.5 Cross-dataset summary — ToT A4 Δ over A1 on S4
 
 | **Dataset** | **A1 (ToT) S4** | **A4 (ToT) S4** | **Δ** | **GoT Δ ref** |
 | ----------- | --------------: | --------------: | ----: | ------------: |
