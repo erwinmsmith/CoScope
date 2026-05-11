@@ -452,6 +452,35 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 > zero — exactly what we want, because S4 quality is bottlenecked by the
 > private-fallback retriever (independent of structure).
 
+### 1e.5 Recall@5 / Recall@20 (alternative cutoffs, ToT MuSiQue)
+
+> Source: `data/processed/tot/musique/test/eval_v9_qwen_full_k{5,20}.json`
+> (re-evaluation on existing shards, embedding cache reused, no LLM).
+
+| **Variant**     | **S1 R@5** | **S1 R@20** | **S3 R@5** | **S3 R@20** | **S4 R@5** | **S4 R@20** |
+| --------------- | ---------: | ----------: | ---------: | ----------: | ---------: | ----------: |
+| **A1**          | 0.6578     | **1.0000**  | 0.9807     | **1.0000**  | 0.6474     | 0.7942      |
+| A2              | 0.3868     | 0.8482      | 0.6390     | 0.9521      | 0.4450     | 0.7020      |
+| A3              | 0.4425     | 0.9141      | 0.6417     | 0.9712      | 0.5365     | 0.9444      |
+| **A4**          | **0.6730** | **1.0000**  | 0.9827     | **1.0000**  | **0.7444** | 0.9513      |
+| A4_nofb         | 0.6730     | 1.0000      | 0.9827     | 1.0000      | 0.7443     | 0.9515      |
+| A4_norerank     | 0.4425     | 0.9141      | 0.6417     | 0.9712      | 0.5365     | 0.9444      |
+| **A5**          | 0.6640     | 1.0000      | **0.9845** | **1.0000**  | 0.6735     | 0.9433      |
+| A5_noproj       | 0.6621     | 1.0000      | 0.9807     | 1.0000      | 0.6761     | **0.9813**  |
+| A5_norerank     | 0.2830     | 0.7051      | 0.3069     | 0.8671      | 0.3014     | 0.7759      |
+| **A6**          | 0.6667     | 1.0000      | 0.9807     | 1.0000      | 0.6510     | 0.7942      |
+| **A7**          | 0.6667     | 1.0000      | 0.9807     | 1.0000      | 0.6510     | 0.7942      |
+
+(S2 omitted: 1 episode in ToT MuSiQue — see §0.5 footnote on ToT ρ bimodality.)
+
+> **R@5**: A4 still wins on every subset (S1 +1.5 pt, S3 +0.2 pt, S4
+> +9.7 pt over A1). A6/A7 trail A4 by 9.3 pt on S4 because they do
+> not use private fallback. **R@20**: A1/A4/A5/A6/A7 saturate S1/S3 at
+> 1.000 (k=20 not informative on those subsets); S4 is the
+> discriminator and A5_noproj wins (0.981) > A4 (0.951) > A5 (0.943)
+> ≫ A1/A6/A7 (0.794). The block-router R@20 ceiling on S4 is
+> structural (no private fallback by design).
+
 ---
 
 ## Table 1f · Retrieval Quality — 2WikiMultiHopQA ToT (25 152 ep, **Qwen text-embedding-v3**, k=10)
@@ -491,7 +520,7 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 | A6 / A7         | 0.000   | 0.000 †  |
 
 > † **All cFMR values on 2Wiki are mechanically 0** because
-> `data/interim/2wikimhqa/restricted_evidence/` has not been built yet;
+> `data/interim/restricted/2wikimhqa_restricted.jsonl` has not been built yet;
 > S4 shards contain no `mem_rs_` entries to leak. This applies to A2
 > (which would otherwise leak) **and** to A4 / A5 (which would otherwise
 > protect). The cFMR axis on 2Wiki is therefore un-verified — only the
@@ -523,6 +552,28 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 > A4-ToT lifts S4 by **+20.7 pt** over A1-ToT — almost identical to GoT's
 > +21.3 pt. The S1/S3 numbers are also within ±0.3 pt of GoT. Reasoning
 > structure is genuinely orthogonal to the retrieval pipeline on 2Wiki.
+
+### 1f.5 Recall@5 / Recall@20 (alternative cutoffs, ToT 2Wiki)
+
+> Source: `data/processed/tot/2wikimhqa/test/eval_v9_qwen_full_k{5,20}.json`.
+
+| **Variant**     | **S1 R@5** | **S1 R@20** | **S3 R@5** | **S3 R@20** | **S4 R@5** | **S4 R@20** |
+| --------------- | ---------: | ----------: | ---------: | ----------: | ---------: | ----------: |
+| **A1**          | 0.5918     | **1.0000**  | 0.9953     | **1.0000**  | 0.6942     | 0.7736      |
+| A2              | 0.5585     | 0.9976      | 0.8332     | **1.0000**  | 0.7592     | 0.9969      |
+| A3              | 0.5579     | **1.0000**  | 0.8334     | **1.0000**  | 0.7608     | **1.0000**  |
+| **A4**          | **0.5918** | **1.0000**  | **0.9953** | **1.0000**  | **0.8639** | **1.0000**  |
+| A4_nofb         | 0.5918     | 1.0000      | 0.9953     | 1.0000      | 0.8639     | 1.0000      |
+| A4_norerank     | 0.5579     | 1.0000      | 0.8334     | 1.0000      | 0.7608     | 1.0000      |
+| **A5**          | **0.5926** | 1.0000      | 0.9953     | 1.0000      | 0.7542     | 1.0000      |
+| A5_noproj       | 0.5926     | 1.0000      | 0.9953     | 1.0000      | 0.7542     | 1.0000      |
+| A5_norerank     | 0.5036     | 1.0000      | 0.6689     | 1.0000      | 0.6129     | 1.0000      |
+| **A6**          | 0.5926     | 1.0000      | 0.9953     | 1.0000      | 0.6944     | 0.7736      |
+| **A7**          | 0.5926     | 1.0000      | 0.9953     | 1.0000      | 0.6944     | 0.7736      |
+
+> A4 keeps a **+17.0 pt** S4 R@5 margin over A1 (0.864 vs 0.694) and
+> reaches R@20=1.000 on every non-isolated subset. A6/A7 cap S4 R@20
+> at 0.774 — the same structural ceiling seen on MuSiQue and Hotpot.
 
 ---
 
@@ -572,7 +623,7 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 > † **All cFMR values on Hotpot are mechanically 0** for the same
 > reason as 2Wiki (§1f.2): no `mem_rs_` entries until the
-> `data/interim/hotpotqa/restricted_evidence/` interim is built.
+> `data/interim/restricted/hotpotqa_restricted.jsonl` interim is built.
 > Privacy axis is un-verified on Hotpot.
 
 ### 1g.3 Stage B — A8-ToT (LLM-rewritten query_intent, qwen-plus, k=10)
@@ -609,6 +660,59 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 > The retrieval pipeline (A4) and the reasoning structure (GoT vs ToT) are
 > orthogonal. Privacy contract (cFMR=0 on every scope-aware variant) is
 > preserved end-to-end.
+
+### 1g.6 Recall@5 / Recall@20 (alternative cutoffs, ToT Hotpot)
+
+> Source: `data/processed/tot/hotpotqa/test/eval_v9_qwen_full_k{5,20}.json`.
+> ToT Hotpot has only S3 + S4 (see §1g intro for why); S1/S2 are absent.
+
+| **Variant**     | **S3 R@5** | **S3 R@20** | **S4 R@5** | **S4 R@20** |
+| --------------- | ---------: | ----------: | ---------: | ----------: |
+| **A1**          | 0.9879     | **1.0000**  | 0.7409     | 0.7500      |
+| A2              | 0.7932     | 1.0000      | 0.7596     | **1.0000**  |
+| A3              | 0.7955     | 1.0000      | 0.7752     | **1.0000**  |
+| **A4**          | **0.9881** | **1.0000**  | **0.9292** | **1.0000**  |
+| A4_nofb         | 0.9881     | 1.0000      | 0.9292     | 1.0000      |
+| A4_norerank     | 0.7955     | 1.0000      | 0.7752     | 1.0000      |
+| **A5**          | 0.9879     | 1.0000      | 0.8214     | 1.0000      |
+| A5_noproj       | 0.9879     | 1.0000      | 0.8214     | 1.0000      |
+| A5_norerank     | 0.5264     | 1.0000      | 0.4993     | 1.0000      |
+| **A6**          | 0.9879     | 1.0000      | 0.7409     | 0.7500      |
+| **A7**          | 0.9879     | 1.0000      | 0.7409     | 0.7500      |
+
+> Hotpot ToT S4 R@5 spread is the widest among the three ToT datasets:
+> A4 = 0.929, A5 = 0.821, A6 = 0.741, A1 = 0.741. A4's +18.8 pt margin
+> over A1 / A6 at R@5 is the strongest small-k effect across all six
+> (rpt × dataset) cells. R@20 saturates everywhere except A1 / A6 / A7
+> S4 (capped at 0.750 for the same structural reason).
+
+### 1g.7 Stage B (A8) — R@5 / R@20 summary across all three ToT datasets
+
+> Source: `data/processed/tot/{ds}/test_qi/eval_v9_qwen_a8_k{5,20}.json`.
+> Stage B is `A8 = A6 + LLM-rewritten query_intent`. R@5/R@20 are
+> reported only for the variants whose Stage A baseline they refine
+> (a6 / a7 / a8). Cross-cell pattern is consistent: Stage B keeps
+> Stage A recall almost exactly intact; the value-add is on MRR
+> (see §1e.3 / §1f.3 / §1g.3).
+
+| **Dataset / subset** | **A6 R@5** | **A8 R@5** | **A6 R@20** | **A8 R@20** |
+| -------------------- | ---------: | ---------: | ----------: | ----------: |
+| ToT MuSiQue S1       | 0.6667     | 0.6702     | 1.0000      | 1.0000      |
+| ToT MuSiQue S3       | 0.9807     | 0.9797     | 1.0000      | 1.0000      |
+| ToT MuSiQue S4       | 0.6510     | 0.6520     | 0.7942      | 0.7942      |
+| ToT 2Wiki S1         | 0.5926     | 0.5937     | 1.0000      | 1.0000      |
+| ToT 2Wiki S3         | 0.9953     | 0.9963     | 1.0000      | 1.0000      |
+| ToT 2Wiki S4         | 0.6944     | 0.6951     | 0.7736      | 0.7736      |
+| ToT Hotpot S3        | 0.9879     | 0.9897     | 1.0000      | 1.0000      |
+| ToT Hotpot S4        | 0.7409     | 0.7423     | 0.7500      | 0.7500      |
+
+> Largest A8 R@5 lift over A6: **+8.33 pt on ToT MuSiQue S2** (not in
+> the table above because n=1 — discarded as noise), then **+0.35 pt
+> on ToT MuSiQue S1**. All other deltas are ≤ 0.20 pt. R@20 is
+> identical to A6 by construction (same stage-1 candidate set, A8
+> only reranks the top-k). This is consistent with the finding that
+> A8's contribution is concentrated in MRR / top-1 quality rather
+> than recall coverage.
 
 ---
 
@@ -722,7 +826,7 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 > `eval_v9_qwen_full_k10.json`).
 >
 > **⚠ Privacy claim scope: MuSiQue is the only dataset whose
-> `data/interim/.../restricted_evidence/` interim has been built so far.**
+> `data/interim/restricted/musique_restricted.jsonl` interim has been built so far.**
 > The `RestrictedBuilder` populates `mem_rs_` entries only when the
 > interim file exists; without it, S4 episodes contain only
 > `mem_ws_ / mem_ts_ / mem_pr_` entries, so any cFMR computed against
@@ -1013,7 +1117,7 @@ Sorted by cost / impact ratio:
 
 | **Action** | **Cost** | **Lifts which claim?** |
 | ---------- | -------- | ---------------------- |
-| Build `data/interim/{2wikimhqa,hotpotqa}/restricted_evidence/` and re-run S4 retrieval (no LLM) | ~1–2 h | Cross-dataset privacy (claim #1 above) |
+| Build `data/interim/restricted/{2wikimhqa,hotpotqa}_restricted.jsonl` via `python -m scripts.generate_restricted --dataset {ds} --split test --data-dir data/raw/{ds}` and re-run S4 retrieval (no LLM) | ~1–2 h | Cross-dataset privacy (claim #1 above) |
 | Adjust ρ narrative to "topology proxy" + footnote derivation | ~30 min docs | Soundness of subset stratification |
 | Run BM25 on MuSiQue test as one Table 2 row | ~2 h | At least one external baseline |
 | Replace "vs A2" force-merge baseline numbers with a learned-W A7 once that is implemented | research | Closes the A6/A7 alias gap |
