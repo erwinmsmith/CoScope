@@ -171,11 +171,18 @@ class RetrievalPipeline:
         # a4_norerank / a5_norerank: isolate SVD vs mean-query first-stage
         # ranking power by disabling the hybrid full-dim rerank.
         scope_only_routing = variant in {
-            "a3", "a4", "a4_nofb", "a4_norerank", "a5", "a5_noproj", "a5_norerank"
+            "a3", "a4", "a4_nofb", "a4_norerank",
+            "a5", "a5_noproj", "a5_norerank", "a5_doc",
         }
         use_identity_projection = variant == "a5_noproj"
         skip_fulldim_rerank = variant == "a5_norerank"
-        is_svd_family = variant in {"a5", "a5_noproj", "a5_norerank", "a6"}
+        # a5_doc: strict realisation of introduction.md §8.4-8.7 (random sparse W,
+        # SVD-orthogonalised W_final, applied uniformly to every bucket). It
+        # shares the SVD bucket scaffold with a5/a6 but swaps the per-bucket
+        # online SVD on Q for a fixed data-agnostic projection from
+        # SharedProjectionModule.
+        use_doc_projection = variant == "a5_doc"
+        is_svd_family = variant in {"a5", "a5_noproj", "a5_norerank", "a5_doc", "a6"}
 
         routing = (
             self._route_scope_only(requests)
@@ -222,6 +229,7 @@ class RetrievalPipeline:
                     metadata_mode=f"{variant}_query_matrix_svd",
                     use_identity_projection=use_identity_projection,
                     skip_fulldim_rerank=skip_fulldim_rerank,
+                    use_doc_projection=use_doc_projection,
                 )
             else:
                 raise ValueError(f"Unsupported variant in bucket dispatch: {variant}")
@@ -270,11 +278,13 @@ class RetrievalPipeline:
         metadata_mode: str,
         use_identity_projection: bool = False,
         skip_fulldim_rerank: bool = False,
+        use_doc_projection: bool = False,
     ) -> List[RetrievalResult]:
         query_matrix = self.matrix_builder.build(bucket.requests, self.embedding_provider)
         projection_result = self._svd_projection(
             query_matrix,
             use_identity_projection=use_identity_projection,
+            use_doc_projection=use_doc_projection,
         )
         strategy = projection_result.metadata.get("strategy", "")
         if strategy == "identity_fallback_for_small_bucket":
@@ -711,11 +721,37 @@ class RetrievalPipeline:
             routing_metadata={"strategy": "scope_only"},
         )
 
-    def _svd_projection(self, query_matrix, use_identity_projection: bool = False):
+    def _svd_projection(
+        self,
+        query_matrix,
+        use_identity_projection: bool = False,
+        use_doc_projection: bool = False,
+    ):
         from retrieval.projection import ProjectionResult
 
         Q = query_matrix.embeddings
         n = query_matrix.num_queries
+
+        # A5-doc: strict introduction.md §8.4-8.7 path. The projection module
+        # generates a random sparse W (Xavier init + structured sparse mask),
+        # SVD-orthogonalises it once (fit), and reuses the resulting W_final
+        # for every bucket. The data Q is *not* used to build W; Q only enters
+        # via Z = Q^T W_final at transform time. Deterministic across runs
+        # thanks to ProjectionConfig.seed.
+        if use_doc_projection:
+            if not self.projection.is_fitted:
+                # SharedProjectionModule.fit ignores the supplied query
+                # matrices' contents (W is data-agnostic) but requires a
+                # non-empty list as a sanity check; passing the current
+                # query_matrix is the cheapest way to satisfy that.
+                self.projection.fit([query_matrix])
+            transformed = self.projection.transform(query_matrix)
+            transformed.metadata = {
+                **(transformed.metadata or {}),
+                "strategy": "doc_random_sparse_svd_projection",
+                "num_queries": n,
+            }
+            return transformed
 
         # A5-noproj ablation: skip SVD entirely and use full-rank identity
         # projection. Equivalent to scoring each query independently in the
@@ -879,6 +915,8 @@ class RetrievalPipeline:
             "query_matrix_identity": "a5_noproj",
             "a5_identity": "a5_noproj",
             "query_matrix_norerank": "a5_norerank",
+            "doc_random_sparse_svd": "a5_doc",
+            "introduction_strict": "a5_doc",
             "shared_mean_norerank": "a4_norerank",
             "query_matrix_svd_block_routing": "a6",
             "coscope": "a6",

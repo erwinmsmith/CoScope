@@ -86,12 +86,16 @@ coscope_data/
 logs/
 
 # Dataset artifacts (raw corpora, processed shards, interim)
-# Track the empty skeleton via .gitkeep; ignore all real data files.
+# Track the empty skeleton and migration notes; ignore all real data files.
 /data/*
+!/data/**/
+/data/**/*
+!/data/**/
+!/data/*.md
 !/data/.gitkeep
-!/data/raw/.gitkeep
-!/data/processed/.gitkeep
-!/data/interim/.gitkeep
+!/data/**/.gitkeep
+!/data/archive/cot_old/README.md
+!/data/archive/senior_old/README.md
 
 # Temporary files
 *.tmp

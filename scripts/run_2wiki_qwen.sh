@@ -3,7 +3,7 @@
 # k=10 first (cold, populates cache), then k=5 / k=20 (cache-warm).
 
 set -euo pipefail
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate zhenke

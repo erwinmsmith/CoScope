@@ -4,7 +4,7 @@
 # run Stage A-Qwen evaluation at k=10 / k=5 / k=20.
 
 set -euo pipefail
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate zhenke

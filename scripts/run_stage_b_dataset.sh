@@ -13,7 +13,7 @@
 # with --include-s4 if A8 should cover S4).
 
 set -euo pipefail
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate zhenke

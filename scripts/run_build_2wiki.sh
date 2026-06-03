@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build 2WikiMultiHopQA dev+test episodes (GoT, all graph types incl. POLICY_ISOLATED for test).
 set -euo pipefail
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate zhenke

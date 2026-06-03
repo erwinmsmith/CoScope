@@ -283,7 +283,14 @@ class PolicyValidator:
 
         # Warn if no team-visible (task_shared_episodic) shared_required item
         # exists — means nothing is cross-agent visible at build time.
-        if shared_layers and "task_shared_episodic" not in shared_layers:
+        expects_team_shared = bool(
+            (ep.meta or {}).get("expects_team_shared_evidence", True)
+        )
+        if (
+            expects_team_shared
+            and shared_layers
+            and "task_shared_episodic" not in shared_layers
+        ):
             result.add_warning(
                 f"episode {ep.episode_id}: no shared_required evidence in "
                 f"task_shared_episodic layer (layers seen: {sorted(set(shared_layers))})"

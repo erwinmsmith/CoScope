@@ -2,7 +2,7 @@
 # Stage B: generate Step-2 query_intent for all 12085 MuSiQue/GoT episodes,
 # 16-way concurrent DashScope qwen-plus.
 set -euo pipefail
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate zhenke

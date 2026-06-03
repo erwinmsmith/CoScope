@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Print one-page status of all running coscope_* screens / logs.
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 echo "=========================================="
 echo "  CoScope status @ $(date)"
 echo "=========================================="

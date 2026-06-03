@@ -2,7 +2,7 @@
 # Stage A-Qwen: 12085 ep MuSiQue x GoT x 11 variants, k in {5,10,20}.
 # Embedder = DashScope text-embedding-v3 (dim=1024) with disk cache.
 set -euo pipefail
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate zhenke

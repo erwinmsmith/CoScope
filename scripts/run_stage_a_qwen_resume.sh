@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Resume k=5 and k=20 (k=10 already done; cache fully warm).
 set -euo pipefail
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate zhenke

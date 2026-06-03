@@ -148,6 +148,10 @@ class EpisodeBuilder:
             restricted_entries = self.restricted_builder.load_from_interim(
                 dataset, original_id, episode_id
             )
+            if not restricted_entries:
+                restricted_entries = self.restricted_builder.build_from_raw_item(
+                    raw_item, dataset, episode_id
+                )
 
         memory_entries: List[MemoryEntry] = (
             list(workspace_entries)
@@ -214,6 +218,11 @@ class EpisodeBuilder:
                 "seed": int(seed),
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "reasoning_path_type": self.reasoning_path_type.value,
+                "qa_type": raw_item.get("qa_type"),
+                "task_shared_item_count": len(raw_item.get("task_shared_items", []) or []),
+                "expects_team_shared_evidence": bool(
+                    raw_item.get("task_shared_items", []) or []
+                ),
             },
         )
 

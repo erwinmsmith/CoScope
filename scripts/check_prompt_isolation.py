@@ -1,7 +1,7 @@
 """
 Prompt isolation check (v2.2 §16.4 / §18.7).
 
-Scans every `.py` file under `coscope/` and fails if any of them
+Scans every `.py` file under the current project and fails if any of them
 imports a forbidden external prompt / template library. The whole point of
 the v2.2 prompt-internalization rule is to make GoT / CoT / ToT prompts
 entirely self-contained so ablation experiments stay reproducible across
@@ -9,7 +9,7 @@ dependency upgrades.
 
 Usage
 -----
-    python -m scripts.check_prompt_isolation            # default src dir
+    python -m scripts.check_prompt_isolation            # default project root
     python -m scripts.check_prompt_isolation --src other/path
 
 Exit code is 0 when clean, 1 when at least one violation is found.
@@ -84,8 +84,8 @@ def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--src",
-        default="coscope",
-        help="Root directory to scan (default: coscope/data)",
+        default=".",
+        help="Root directory to scan (default: current project)",
     )
     args = parser.parse_args(argv)
 

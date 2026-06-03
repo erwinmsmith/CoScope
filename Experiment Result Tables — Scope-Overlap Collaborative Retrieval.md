@@ -807,48 +807,88 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 
 | **Method** | **MuSiQue FMR / cFMR** | **2Wiki FMR / cFMR** | **HotpotQA FMR / cFMR** | **GSM8K FMR / cFMR** | **MATH FMR / cFMR** |
 | ---------- | ---------------------- | -------------------- | ----------------------- | -------------------- | ------------------- |
-| **A1** | 0.000 / **0.000** | 0.000 / 0.000 ‡ | 0.000 / 0.000 ‡ | | |
-| **A2** | 1.000 / **0.683** | 1.000 / 0.000 ‡ | 1.000 / 0.000 ‡ | | |
-| **A3** | 1.000 / **0.000** | 1.000 / 0.000 ‡ | 1.000 / 0.000 ‡ | | |
-| **A4** | 1.000 / **0.000** | 1.000 / 0.000 ‡ | 1.000 / 0.000 ‡ | | |
-| **A5** | 1.000 / **0.000** | 1.000 / 0.000 ‡ | 1.000 / 0.000 ‡ | | |
-| **A6** | 0.000 / **0.000** | 0.000 / 0.000 ‡ | 0.000 / 0.000 ‡ | | |
-| **A7** | 0.000 / **0.000** | 0.000 / 0.000 ‡ | 0.000 / 0.000 ‡ | | |
-| **A8** | 0.000 / **0.000** | (Stage B A8 eval running) | 0.000 / 0.000 ‡ | | |
+| **A1** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
+| **A2** | 1.000 / **0.683** | (rerun pending) | (rerun pending) | | |
+| **A3** | 1.000 / **0.000** | (rerun pending) | (rerun pending) | | |
+| **A4** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
+| **A4_nofb** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
+| **A4_norerank** | 1.000 / **0.000** | 1.000 / **0.000** | 1.000 / **0.000** | | |
+| **A5** | 1.000 / **0.000** | (rerun pending) | (rerun pending) | | |
+| **A6** | 0.000 / **0.000** | 0.000 / **0.000** | 0.000 / **0.000** | | |
+| **A7** | 0.000 / **0.000** | (alias of A6) | (alias of A6) | | |
+| **A8** | 0.000 / **0.000** | (Stage B A8 eval running) | (Stage B A8 eval running) | | |
 
-> ‡ = mechanically 0 because the dataset's restricted-evidence interim
-> has not been built yet (see scope warning below). Only MuSiQue cFMR
-> values are real privacy evidence at the moment.
+> All numbers are S4-only at k=10 from the Qwen text-embedding-v3 evaluator
+> on shards rebuilt with full restricted interim (Phase A2 complete, 2026-05-11).
+> MuSiQue value (A2 cFMR=0.683) is from the original `eval_v9_qwen_full_k10.json`.
+> 2Wiki / Hotpot rows for `a1 / a4 / a4_nofb / a4_norerank / a6` are taken from
+> `data/processed/{got,tot}/{2wikimhqa,hotpotqa}/test/eval_v9_qwen_s4_k10.json`
+> (averaged across `got` and `tot` reasoning structures; the two RPTs produce
+> identical FMR/cFMR — see Table 6a).
+>
+> **Restricted interim coverage** (state at 2026-05-11):
+> * `data/interim/restricted/musique_restricted.jsonl`  — 2417 ep (built earlier)
+> * `data/interim/restricted/2wikimhqa_restricted.jsonl` — 12576 ep (Phase A1, 2026-05-11)
+> * `data/interim/restricted/hotpotqa_restricted.jsonl` — 7405 ep (Phase A1, 2026-05-11)
+>
+> All three datasets now have real verifier-injected restricted entries
+> in their S4 shards. The previously-vacuous `cFMR = 0` footnote is
+> **resolved** for 2Wiki and Hotpot.
+>
+> Pending fills (no implementation gap, only need to run a2/a3/a5 on
+> the rebuilt S4 shards): see TODO at end of section.
 
-> All numbers are S4-only at k=10 from the Qwen text-embedding-v3 evaluator.
-> MuSiQue value updated from earlier draft (A2 cFMR was misreported as 0.341
-> in v1; the correct k=10 number is **0.683**, taken from the current
-> `eval_v9_qwen_full_k10.json`).
+### Key takeaway from the post-rebuild evaluation (2026-05-11)
+
+> **Structural merge ≠ content leak.** The A4 family
+> (A4 / A4_nofb / A4_norerank) reports `FMR = 1.000` on every dataset —
+> meaning *every* S4 verifier request is served from a shared bucket —
+> yet `cFMR = 0.000` on every dataset, including the two that previously
+> reported only vacuous zeros. In other words: the bucket is shared at
+> the structural level, but the policy filter inside `_check_policy`
+> still removes all `RESTRICTED`-tagged memories before they enter
+> any agent's top-k.
 >
-> **⚠ Privacy claim scope: MuSiQue is the only dataset whose
-> `data/interim/restricted/musique_restricted.jsonl` interim has been built so far.**
-> The `RestrictedBuilder` populates `mem_rs_` entries only when the
-> interim file exists; without it, S4 episodes contain only
-> `mem_ws_ / mem_ts_ / mem_pr_` entries, so any cFMR computed against
-> "restricted gold" is **mechanically 0** because there is nothing
-> restricted to leak. This applies to **both** the leaky variants (A2)
-> and the protective variants (A4 / A5 / A6 / A8) on 2Wiki and Hotpot.
->
-> Therefore:
-> * **MuSiQue cFMR** numbers are real privacy evidence: A2 leaks 68 % of
->   restricted content; A4 / A5 / A6 / A8 leak 0 %. This single dataset
->   already establishes the scope-bucket / private-fallback contract.
-> * **2Wiki / Hotpot cFMR=0** entries above are *vacuously* 0 — they
->   confirm no leak only because no restricted gold exists in those
->   shards. They do **not** independently corroborate the privacy claim.
->   The R@10 / MRR / FMR numbers on these datasets are still valid as
->   retrieval-quality measurements; only the privacy axis is
->   un-verified.
->
-> To upgrade 2Wiki / Hotpot from "vacuous 0" to "real evidence", the
-> restricted-evidence interim must be built for them and the S4 shard
-> rebuilt; only the S4 retrieval eval has to be re-run, no LLM calls.
-> Tracked as **TODO** below the table.
+> This is the central safety claim of the paper, now corroborated on
+> three multihop QA datasets and two reasoning structures (got / tot).
+> A2 on 2Wiki / Hotpot needs to be added to demonstrate that
+> non-zero cFMR is possible in this evaluation setting (i.e. that
+> our `cFMR = 0` for A4 is not an artefact of evaluator construction).
+
+### Table 6a · S4 Privacy Detail — Post-rebuild (k=10, restricted interim built)
+
+| RPT | Dataset | n | Variant | R@10 | MRR | FMR | cFMR | Savings |
+|---|---|---:|---|---:|---:|---:|---:|---:|
+| got | hotpotqa | 7405 | a1 | 0.7497 | 0.6499 | 0.000 | **0.000** | 0.000 |
+| got | hotpotqa | 7405 | a4 | 0.9947 | 0.7604 | 1.000 | **0.000** | 0.750 |
+| got | hotpotqa | 7405 | a4_nofb | 0.9947 | 0.7599 | 1.000 | **0.000** | 0.750 |
+| got | hotpotqa | 7405 | a4_norerank | 0.9835 | 0.8613 | 1.000 | **0.000** | 0.750 |
+| got | hotpotqa | 7405 | a6 | 0.7497 | 0.6571 | 0.000 | **0.000** | 0.250 |
+| got | 2wikimhqa | 12576 | a1 | 0.7679 | 0.7283 | 0.000 | **0.000** | 0.000 |
+| got | 2wikimhqa | 12576 | a4 | 0.9806 | 0.8705 | 1.000 | **0.000** | 0.768 |
+| got | 2wikimhqa | 12576 | a4_nofb | 0.9806 | 0.8705 | 1.000 | **0.000** | 0.768 |
+| got | 2wikimhqa | 12576 | a4_norerank | 0.9303 | 0.9094 | 1.000 | **0.000** | 0.768 |
+| got | 2wikimhqa | 12576 | a6 | 0.7679 | 0.7287 | 0.000 | **0.000** | 0.305 |
+| tot | hotpotqa | 7405 | a1 | 0.7494 | 0.5803 | 0.000 | **0.000** | 0.000 |
+| tot | hotpotqa | 7405 | a4 | 0.9815 | 0.6759 | 1.000 | **0.000** | 0.750 |
+| tot | hotpotqa | 7405 | a4_nofb | 0.9815 | 0.6760 | 1.000 | **0.000** | 0.750 |
+| tot | hotpotqa | 7405 | a4_norerank | 0.9397 | 0.7603 | 1.000 | **0.000** | 0.750 |
+| tot | hotpotqa | 7405 | a6 | 0.7494 | 0.6485 | 0.000 | **0.000** | 0.250 |
+| tot | 2wikimhqa | 12576 | a1 | 0.7727 | 0.6980 | 0.000 | **0.000** | 0.000 |
+| tot | 2wikimhqa | 12576 | a4 | 0.9798 | 0.8216 | 1.000 | **0.000** | 0.774 |
+| tot | 2wikimhqa | 12576 | a4_nofb | 0.9798 | 0.8216 | 1.000 | **0.000** | 0.774 |
+| tot | 2wikimhqa | 12576 | a4_norerank | 0.9198 | 0.8651 | 1.000 | **0.000** | 0.774 |
+| tot | 2wikimhqa | 12576 | a6 | 0.7727 | 0.7055 | 0.000 | **0.000** | 0.321 |
+
+> Sources: `data/processed/{got,tot}/{hotpotqa,2wikimhqa}/test/eval_v9_qwen_s4_k10.json`
+> (Phase A3 outputs, 2026-05-11). The same shards under k=5 / k=20 give
+> qualitatively identical FMR / cFMR (only R@k / MRR change with k).
+
+### TODO — close the cFMR table
+
+* Run A2 / A3 / A5 on the rebuilt S4 shards for 2Wiki and Hotpot
+  (`got` and `tot`). One eval call each, no LLM cost. A2 is the highest
+  priority because it is the only variant expected to leak (cFMR > 0).
 
 ---
 
@@ -938,6 +978,104 @@ A6  ──[Step-2 LLM query rewrite]──▶  A8        (A7 is a code-level ali
 | 16 | | | | | |
 | 32 | | | | | |
 | 64 | | | | | |
+
+> Caveat: A5 implements per-bucket online truncated SVD on the
+> stacked query matrix `Q ∈ R^{k×n}`. When `n ≤ r` (which is the
+> dominant regime in our buckets — most buckets have `n ∈ {2,3,4}`)
+> the effective rank is bounded by `n`, not by `r`. So sweeping `r`
+> above ~3 has no effect on the small-bucket regime regardless of
+> the configured value. See Table 12a for the orthogonal ablation
+> that varies the *mechanism* itself instead of `r`.
+
+---
+
+## Table 12a · Projection Mechanism Ablation — MuSiQue (k=10, GoT, **Qwen text-embedding-v3**)
+
+> Three projection mechanisms compared on the same pipeline scaffold
+> (scope-only routing, hybrid full-dim rerank, private fallback).
+> All three differ only in how the `(Z, W_final)` pair fed into
+> `SharedCandidateRetriever` is constructed:
+>
+> * **A5** — per-bucket truncated SVD on `Q` (data-adaptive subspace).
+> * **A5_DOC** — strict realisation of `introduction.md §8.4–8.7`:
+>   random sparse `W ∈ R^{l×k}` + structural mask, orthogonalised once
+>   via SVD into a fixed `W_final ∈ R^{k×r}` reused for every bucket.
+>   Data-agnostic; `Q` enters only via `Z = Q^T W_final` at transform time.
+> * **A5_NOPROJ** — identity projection (skip SVD; score in original
+>   1024-d embedding space).
+>
+> Identical first-stage pool (same scope-only routing). Differences
+> in scoring are entirely attributable to the projection mechanism.
+
+| **Subset** | **n** | **Variant** | **Recall@10** | **MRR@10** | **FMR** | **cFMR** | **Savings** |
+| ---------- | ----: | ----------- | ------------: | ---------: | ------: | -------: | ----------: |
+| S1 | 4744 | A5         | 0.9890 | 0.8963 | 0.000 | 0.000 | 0.762 |
+| S1 | 4744 | A5_DOC     | 0.9870 | 0.8962 | 0.000 | 0.000 | 0.762 |
+| S1 | 4744 | A5_NOPROJ  | 0.9865 | 0.8963 | 0.000 | 0.000 | 0.762 |
+| S2 | 2 | A5         | 1.0000 | 1.0000 | 0.000 | 0.000 | 0.817 |
+| S2 | 2 | A5_DOC     | 1.0000 | 1.0000 | 0.000 | 0.000 | 0.817 |
+| S2 | 2 | A5_NOPROJ  | 1.0000 | 1.0000 | 0.000 | 0.000 | 0.817 |
+| S3 | 1252 | A5        | 0.9985 | 0.8079 | 0.000 | 0.000 | 0.667 |
+| S3 | 1252 | A5_DOC    | 0.9981 | 0.8067 | 0.000 | 0.000 | 0.667 |
+| S3 | 1252 | A5_NOPROJ | 0.9981 | 0.8083 | 0.000 | 0.000 | 0.667 |
+| S4 | 2417 | A5        | 0.8719 | 0.7430 | 1.000 | 0.000 | 0.780 |
+| S4 | 2417 | A5_DOC    | 0.8706 | 0.7429 | 1.000 | 0.000 | 0.780 |
+| S4 | 2417 | A5_NOPROJ | 0.8715 | 0.7431 | 1.000 | 0.000 | 0.780 |
+
+> Source: `data/processed/got/musique/test/eval_v9_qwen_a5doc_k10.json`
+> (8415 episodes total, all seven shards). Cross-dataset replication
+> (HotpotQA, 2WikiMultiHopQA, S4-only) is currently running — see TODO.
+
+### Pairwise differences (R@10, S4)
+
+| Comparison | ΔR@10 (S4) | ΔMRR (S4) | Verdict |
+|---|---:|---:|---|
+| A5 vs A5_NOPROJ          | +0.0004 | −0.0001 | per-bucket SVD ≈ identity |
+| A5_DOC vs A5_NOPROJ      | −0.0009 | −0.0002 | random sparse SVD ≈ identity |
+| A5_DOC vs A5             | −0.0013 | −0.0001 | doc-strict ≈ data-adaptive |
+
+### Key takeaway
+
+> **The projection matrix mechanism is not the source of A5's
+> retrieval quality.** Three structurally distinct mechanisms —
+> a data-adaptive per-bucket truncated SVD (A5), a fixed data-agnostic
+> random-sparse-orthogonal projection (A5_DOC, the strict
+> `introduction.md` design), and the identity (A5_NOPROJ) — produce
+> Recall@10 within ±0.0013 of each other on every stratum.
+> First-stage savings are identical (same scope-only routing).
+>
+> What this means for the paper:
+>
+> * The "shared subspace" framing in §8.4–8.7 is doing **structural
+>   work** (organising same-bucket queries into one batched
+>   retrieval call, enabling pool reuse across agents) rather than
+>   **statistical work** (projecting onto a more discriminative
+>   low-rank subspace).
+> * Honest ablation: report Table 12a in full and explicitly state
+>   that the projection step contributes 0 ± 0.001 R@10. The
+>   end-to-end gains attributed to A5/A6 in main tables come from
+>   bucket-level pool sharing (already captured by A4) and from
+>   policy-aware block routing (A6 only). The projection itself is
+>   inert in the current 1024-d Qwen embedding space at the
+>   bucket sizes we observe (`n ∈ {2,3,4}`).
+> * Honest counterfactual: the projection step *might* still matter
+>   in a regime we have not tested — much larger buckets
+>   (`n ≫ r`), much higher embedding dimensions, or very tight
+>   first-stage budgets where score collapse from the rerank step
+>   is intolerable. We do not currently have evidence for or against
+>   that regime.
+
+### TODO — close the projection ablation story
+
+* Cross-dataset replication of Table 12a on HotpotQA and 2WikiMultiHopQA
+  S4 shards (currently running in background, output:
+  `data/processed/got/{hotpotqa,2wikimhqa}/test/eval_v9_qwen_a5doc_s4_k10.json`).
+  If the null result holds across all three datasets, lock in the
+  table and stop sweeping `r`.
+* Optional: bucket-size-stratified breakdown of Table 12a (split S1
+  by `n_q` into {2, 3, 4, 5+}) to confirm that the small-bucket regime
+  is where the null result lives, and to document the boundary at
+  which projection might start mattering.
 
 ---
 

@@ -6,7 +6,7 @@ Run it when you want to warm the on-disk cache before large-scale construction,
 or to re-verify previously generated episodes.
 
 Usage:
-    python -m scripts.compute_rho --dataset musique --split dev
+    python -m scripts.compute_rho --dataset musique --split dev --reasoning-path-type got
 """
 
 from __future__ import annotations
@@ -22,11 +22,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Warm the rho cache for serialized episodes.")
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--split", default="dev")
+    parser.add_argument(
+        "--reasoning-path-type",
+        "--rpt",
+        default="got",
+        choices=["got", "cot", "tot"],
+        help="Reasoning path subdirectory under processed/.",
+    )
     parser.add_argument("--processed-dir", default="data/processed")
     parser.add_argument("--cache-dir", default="data/interim/rho_cache")
     args = parser.parse_args()
 
-    root = Path(args.processed_dir) / args.dataset / args.split
+    root = Path(args.processed_dir) / args.reasoning_path_type / args.dataset / args.split
     if not root.exists():
         raise SystemExit(f"no processed episodes at {root}")
 

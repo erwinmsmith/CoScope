@@ -2,7 +2,7 @@
 # Run only the A8 eval portion (k=10) on already-prepared test_qi shards.
 # Usage: DATASET=hotpotqa bash scripts/run_a8_eval_only.sh
 set -euo pipefail
-cd /home/ninghanwen/lixin/CoScope
+cd "$(dirname "$0")/.."
 
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate zhenke
