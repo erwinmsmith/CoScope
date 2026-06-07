@@ -2,7 +2,9 @@
 
 from evaluation.metrics import (
     EvaluationReport,
+    evidence_hit_rate,
     evaluate_retrieval,
+    fallback_rate,
     false_merge_rate,
     first_stage_savings,
     mrr_at_k,
@@ -33,7 +35,9 @@ from evaluation.jsonl_runner import (
 
 __all__ = [
     "EvaluationReport",
+    "evidence_hit_rate",
     "evaluate_retrieval",
+    "fallback_rate",
     "false_merge_rate",
     "first_stage_savings",
     "mrr_at_k",

@@ -103,7 +103,9 @@ class StratifiedCell:
     n_episodes: int
     recall_at_k: float
     mrr_at_k: float
+    evidence_hit_rate: float
     first_stage_savings: float
+    fallback_rate: float
     false_merge_rate: float
     content_false_merge_rate: float = 0.0
 
@@ -114,7 +116,9 @@ class StratifiedCell:
             "n_episodes": self.n_episodes,
             "recall_at_k": self.recall_at_k,
             "mrr_at_k": self.mrr_at_k,
+            "evidence_hit_rate": self.evidence_hit_rate,
             "first_stage_savings": self.first_stage_savings,
+            "fallback_rate": self.fallback_rate,
             "false_merge_rate": self.false_merge_rate,
             "content_false_merge_rate": self.content_false_merge_rate,
         }
@@ -273,7 +277,9 @@ def _aggregate(
             n_episodes=n,
             recall_at_k=sum(r.recall_at_k for r in reports) / n,
             mrr_at_k=sum(r.mrr_at_k for r in reports) / n,
+            evidence_hit_rate=sum(r.evidence_hit_rate for r in reports) / n,
             first_stage_savings=sum(r.first_stage_savings for r in reports) / n,
+            fallback_rate=sum(r.fallback_rate for r in reports) / n,
             false_merge_rate=sum(r.false_merge_rate for r in reports) / n,
             content_false_merge_rate=(
                 sum(r.content_false_merge_rate for r in reports) / n

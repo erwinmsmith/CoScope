@@ -59,7 +59,9 @@ def _normalize_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
                 "variant": variant,
                 "recall_at_k": _weighted(rows, "recall_at_k"),
                 "mrr_at_k": _weighted(rows, "mrr_at_k"),
+                "evidence_hit_rate": _weighted(rows, "evidence_hit_rate"),
                 "first_stage_savings": _weighted(rows, "first_stage_savings"),
+                "fallback_rate": _weighted(rows, "fallback_rate"),
                 "false_merge_rate": _weighted(rows, "false_merge_rate"),
                 "content_false_merge_rate": _weighted(rows, "content_false_merge_rate"),
                 "episodes": sum(int(row.get("n_episodes", 0)) for row in rows),
@@ -95,11 +97,8 @@ def _subset_names(summary: Dict[str, Any]) -> List[str]:
 
 
 def _main_table(rows: List[Dict[str, Any]]) -> str:
-    headers = ["Variant", "Episodes", "EvidenceRecall@k", "MRR@k", "Savings", "FMR"]
-    include_hit = any("hit_at_k" in row for row in rows)
+    headers = ["Variant", "Episodes", "EvidenceRecall@k", "Hit@k", "MRR@k", "Savings", "Fallback", "FMR"]
     include_cfmr = any("content_false_merge_rate" in row for row in rows)
-    if include_hit:
-        headers.insert(3, "Hit@k")
     if include_cfmr:
         headers.append("cFMR")
 
@@ -109,12 +108,12 @@ def _main_table(rows: List[Dict[str, Any]]) -> str:
             str(row.get("variant", "")),
             str(row.get("episodes", row.get("n_episodes", ""))),
             _fmt(float(row.get("recall_at_k", 0.0))),
+            _fmt(float(row.get("evidence_hit_rate", row.get("hit_at_k", 0.0)))),
             _fmt(float(row.get("mrr_at_k", 0.0))),
             _fmt(float(row.get("first_stage_savings", 0.0))),
+            _fmt(float(row.get("fallback_rate", 0.0))),
             _fmt(float(row.get("false_merge_rate", 0.0))),
         ]
-        if include_hit:
-            values.insert(3, _fmt(float(row.get("hit_at_k", 0.0))))
         if include_cfmr:
             values.append(_fmt(float(row.get("content_false_merge_rate", 0.0))))
         body.append(values)

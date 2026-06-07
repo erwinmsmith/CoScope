@@ -126,7 +126,9 @@ def main() -> int:
         nargs="+",
         default=[
             "recall_at_k",
+            "evidence_hit_rate",
             "mrr_at_k",
+            "fallback_rate",
             "false_merge_rate",
             "content_false_merge_rate",
             "first_stage_savings",

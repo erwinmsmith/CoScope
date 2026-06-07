@@ -267,8 +267,9 @@ report = evaluate_retrieval(
 print(report.to_dict())
 ```
 
-The report includes `recall_at_k`, `mrr_at_k`,
-`first_stage_savings`, and `false_merge_rate`.
+The report includes `recall_at_k`, `evidence_hit_rate`, `mrr_at_k`,
+`fallback_rate`, `first_stage_savings`, `false_merge_rate`, and
+`content_false_merge_rate`.
 
 To compare all no-training variants in one pass:
 

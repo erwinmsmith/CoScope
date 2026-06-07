@@ -24,13 +24,16 @@ class EvaluationReport:
 
     recall_at_k: float
     mrr_at_k: float
+    evidence_hit_rate: float
     first_stage_savings: float
+    fallback_rate: float
     false_merge_rate: float
     k: int
     evaluated_requests: int
     gold_requests: int
     first_stage_actual: int
     first_stage_independent: int
+    fallback_trigger_count: int
     false_merge_count: int
     conflict_request_count: int
     # Content-level false merge: whether a non-verifier request's top-k
@@ -47,7 +50,9 @@ class EvaluationReport:
         return {
             "recall_at_k": self.recall_at_k,
             "mrr_at_k": self.mrr_at_k,
+            "evidence_hit_rate": self.evidence_hit_rate,
             "first_stage_savings": self.first_stage_savings,
+            "fallback_rate": self.fallback_rate,
             "false_merge_rate": self.false_merge_rate,
             "content_false_merge_rate": self.content_false_merge_rate,
             "k": self.k,
@@ -55,6 +60,7 @@ class EvaluationReport:
             "gold_requests": self.gold_requests,
             "first_stage_actual": self.first_stage_actual,
             "first_stage_independent": self.first_stage_independent,
+            "fallback_trigger_count": self.fallback_trigger_count,
             "false_merge_count": self.false_merge_count,
             "conflict_request_count": self.conflict_request_count,
             "content_false_merge_count": self.content_false_merge_count,
@@ -99,6 +105,23 @@ def mrr_at_k(
     return sum(values.values()) / len(values)
 
 
+def evidence_hit_rate(
+    results: Sequence[RetrievalResult],
+    gold_by_request: GoldMap,
+    k: int = 10,
+) -> float:
+    """
+    Compute the fraction of gold-bearing requests with at least one gold
+    evidence item in the top-k result list.
+
+    Unlike Recall@k, this is binary per request: any gold hit counts as 1.
+    """
+    values = _per_request_hit(results, gold_by_request, k)
+    if not values:
+        return 0.0
+    return sum(1.0 if hit else 0.0 for hit in values.values()) / len(values)
+
+
 def first_stage_savings(
     *,
     actual_first_stage: int,
@@ -113,6 +136,17 @@ def first_stage_savings(
         return 0.0
     saved = independent_first_stage - actual_first_stage
     return saved / independent_first_stage
+
+
+def fallback_rate(
+    *,
+    fallback_triggers: int,
+    total_requests: int,
+) -> float:
+    """Compute the fraction of requests that triggered private fallback."""
+    if total_requests <= 0:
+        return 0.0
+    return fallback_triggers / total_requests
 
 
 def false_merge_rate(
@@ -247,6 +281,8 @@ def evaluate_retrieval(
 
     recall_values = _per_request_recall(results, gold_by_request, k)
     mrr_values = _per_request_mrr(results, gold_by_request, k)
+    hit_values = _per_request_hit(results, gold_by_request, k)
+    fallback_triggers = int(stats.get("fallback_triggers", 0))
     false_merges, conflict_count = false_merge_counts(
         results,
         conflict_request_ids=conflict_request_ids,
@@ -281,6 +317,8 @@ def evaluate_retrieval(
             "hits": sorted(set(top_ids) & gold),
             "recall_at_k": recall_values.get(result.request_id),
             "mrr_at_k": mrr_values.get(result.request_id),
+            "evidence_hit": hit_values.get(result.request_id),
+            "fallback_triggered": bool(result.fallback_triggered),
             "false_merged": _is_shared_result(result) if is_conflict else False,
             "content_leaked": bool(restricted_hits),
             "restricted_hits": restricted_hits,
@@ -291,9 +329,18 @@ def evaluate_retrieval(
             sum(recall_values.values()) / len(recall_values) if recall_values else 0.0
         ),
         mrr_at_k=(sum(mrr_values.values()) / len(mrr_values) if mrr_values else 0.0),
+        evidence_hit_rate=(
+            sum(1.0 if hit else 0.0 for hit in hit_values.values()) / len(hit_values)
+            if hit_values
+            else 0.0
+        ),
         first_stage_savings=first_stage_savings(
             actual_first_stage=actual_first_stage,
             independent_first_stage=independent_count,
+        ),
+        fallback_rate=fallback_rate(
+            fallback_triggers=fallback_triggers,
+            total_requests=len(results),
         ),
         false_merge_rate=false_merges / conflict_count if conflict_count else 0.0,
         content_false_merge_rate=(
@@ -304,6 +351,7 @@ def evaluate_retrieval(
         gold_requests=len(recall_values),
         first_stage_actual=actual_first_stage,
         first_stage_independent=independent_count,
+        fallback_trigger_count=fallback_triggers,
         false_merge_count=false_merges,
         conflict_request_count=conflict_count,
         content_false_merge_count=content_leaks,
@@ -343,6 +391,21 @@ def _per_request_mrr(
                 score = 1.0 / idx
                 break
         values[result.request_id] = score
+    return values
+
+
+def _per_request_hit(
+    results: Sequence[RetrievalResult],
+    gold_by_request: GoldMap,
+    k: int,
+) -> Dict[str, bool]:
+    values: Dict[str, bool] = {}
+    for result in results:
+        gold = set(gold_by_request.get(result.request_id, []))
+        if not gold:
+            continue
+        top_ids = set(_top_memory_ids(result, k))
+        values[result.request_id] = bool(top_ids & gold)
     return values
 
 
