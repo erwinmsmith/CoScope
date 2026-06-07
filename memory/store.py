@@ -106,14 +106,24 @@ class InMemoryMemoryStore:
         # Determine candidate IDs
         candidate_ids: Set[str] = set()
 
-        if scope_filter:
+        if scope_filter is None:
+            candidate_ids.update(self._entries.keys())
+        elif not scope_filter:
+            # Empty list explicitly means "no scopes accessible" -> return nothing.
+            # Falling through to the global pool here would silently bypass
+            # scope isolation when a malformed/empty-scope request arrives.
+            return []
+        else:
             for scope_id in scope_filter:
                 if scope_id in self._scope_index:
                     candidate_ids.update(self._scope_index[scope_id])
-        else:
-            candidate_ids.update(self._entries.keys())
 
-        if memory_type_filter:
+        if memory_type_filter is None:
+            pass
+        elif not memory_type_filter:
+            # Empty list explicitly means "no memory types accessible".
+            return []
+        else:
             type_ids: Set[str] = set()
             for mem_type in memory_type_filter:
                 if mem_type in self._type_index:
@@ -175,9 +185,9 @@ class InMemoryMemoryStore:
         self, memory: MemoryEntry, policy: PolicyConstraints
     ) -> bool:
         """Check if memory satisfies policy constraints."""
-        # A None policy means no policy filter (e.g. scope-only routing for
-        # the A5 / A5-noproj ablations, which intentionally skip policy
-        # merging). Accept all memories in that case.
+        # A None policy means no policy filter. The scope-only routing path
+        # used by A3/A4 buckets passes None here intentionally: those variants
+        # rely on scope filtering alone and skip per-bucket policy merging.
         if policy is None:
             return True
         # Check visibility

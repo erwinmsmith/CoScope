@@ -159,11 +159,15 @@ class RetrievalPipeline:
             results.update({result.request_id: result for result in bucket_results})
 
         for request in routing.independent_requests:
+            if variant in {"a3", "a4_norerank"}:
+                rerank_override: Optional[bool] = False
+            else:
+                rerank_override = None
             result = self._retrieve_independent(
                 request,
                 use_fallback=variant not in {"a3", "a4_nofb"},
                 metadata_mode=f"{variant}_independent",
-                enable_rerank=False if variant == "a4_norerank" else None,
+                enable_rerank=rerank_override,
             )
             results[result.request_id] = result
 
@@ -207,7 +211,7 @@ class RetrievalPipeline:
         accessible = self._bucket_accessible_scopes(bucket)
         candidates = self.memory_store.search(
             query_embedding=query_embedding,
-            scope_filter=accessible or None,
+            scope_filter=accessible,
             memory_type_filter=bucket.memory_types or None,
             policy_filter=bucket.merged_policy,
             top_k=self.config.shared_top_k,
@@ -261,7 +265,7 @@ class RetrievalPipeline:
         query_embedding = self.embedding_provider.embed_query(request.query)
         candidates = self.memory_store.search(
             query_embedding=query_embedding,
-            scope_filter=request.scope.all_scopes or None,
+            scope_filter=request.scope.all_scopes,
             memory_type_filter=request.memory_types,
             policy_filter=request.policy,
             top_k=self.config.shared_top_k,

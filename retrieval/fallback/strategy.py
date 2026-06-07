@@ -139,13 +139,19 @@ class PrivateFallbackRetriever(FallbackRetriever):
                 )
                 all_candidates.extend(candidates)
 
-        # Deduplicate
+        # Sort across scopes/memory_types so RRF rank reflects similarity, not
+        # the (scope_id, mem_type) iteration order.
+        all_candidates.sort(key=lambda c: c.score, reverse=True)
+
+        # Deduplicate and stamp source/agent_id (memory_store.search does not
+        # know which agent it is serving).
         seen = set()
         unique = []
         for candidate in all_candidates:
             if candidate.memory.memory_id not in seen:
                 seen.add(candidate.memory.memory_id)
                 candidate.source = "private"
+                candidate.agent_id = request.agent_id
                 unique.append(candidate)
 
         return unique[: self.max_candidates]
