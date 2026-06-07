@@ -136,12 +136,11 @@ def _main_table(rows: List[Dict[str, Any]]) -> str:
 def _build_findings(rows: List[Dict[str, Any]]) -> List[str]:
     findings: List[str] = []
     a1 = _find_variant(rows, "a1")
+    a2 = _find_variant(rows, "a2")
+    a3 = _find_variant(rows, "a3")
     a4 = _find_variant(rows, "a4")
-    a5 = _find_variant(rows, "a5")
-    a5_noproj = _find_variant(rows, "a5_noproj")
-    a6 = _find_variant(rows, "a6")
-    a7 = _find_variant(rows, "a7")
-    a8 = _find_variant(rows, "a8")
+    a4_nofb = _find_variant(rows, "a4_nofb")
+    a4_norerank = _find_variant(rows, "a4_norerank")
 
     if a1 and a4:
         findings.append(
@@ -150,55 +149,53 @@ def _build_findings(rows: List[Dict[str, Any]]) -> List[str]:
             "but evidence recall drops from "
             f"{_fmt(float(a1['recall_at_k']))} to {_fmt(float(a4['recall_at_k']))}."
         )
-    if a5 and a5_noproj:
-        hit_text = (
-            f" and Hit@k ({_fmt(float(a5.get('hit_at_k', 0.0)))})"
-            if "hit_at_k" in a5
-            else ""
-        )
+    if a2 and a4:
         findings.append(
-            "`a5_noproj` matches `a5` on evidence recall "
-            f"({_fmt(float(a5['recall_at_k']))}){hit_text}, while changing MRR from "
-            f"{_fmt(float(a5['mrr_at_k']))} to {_fmt(float(a5_noproj['mrr_at_k']))}."
+            "`a4` keeps scope-aware sharing while `a2` is the unsafe force-merge baseline; "
+            f"FMR changes from {_fmt(float(a2['false_merge_rate']))} to "
+            f"{_fmt(float(a4['false_merge_rate']))}."
         )
-    if a5 and a4:
+    if a3 and a4:
         findings.append(
-            "`a5` retains more evidence recall than `a4` "
-            f"({_fmt(float(a5['recall_at_k']))} vs {_fmt(float(a4['recall_at_k']))}), "
-            f"while using less sharing savings "
-            f"({_fmt(float(a5['first_stage_savings']))} vs {_fmt(float(a4['first_stage_savings']))})."
+            "`a4` adds personalized rerank and private fallback on top of `a3`; "
+            f"MRR changes from {_fmt(float(a3['mrr_at_k']))} to "
+            f"{_fmt(float(a4['mrr_at_k']))}."
         )
-    if a6 and a7 and a8:
+    if a4_nofb and a4:
         findings.append(
-            "`a6`, `a7`, and `a8` are currently identical on this slice "
-            f"(EvidenceRecall@k={_fmt(float(a6['recall_at_k']))}, "
-            f"MRR@k={_fmt(float(a6['mrr_at_k']))}), "
-            "so query rewriting has not yet separated these variants."
+            "Private fallback contributes "
+            f"{_fmt(float(a4['recall_at_k']) - float(a4_nofb['recall_at_k']))} "
+            "recall over `a4_nofb` on this slice."
+        )
+    if a4_norerank and a4:
+        findings.append(
+            "Personalized rerank contributes "
+            f"{_fmt(float(a4['mrr_at_k']) - float(a4_norerank['mrr_at_k']))} "
+            "MRR over `a4_norerank` on this slice."
         )
     return findings
 
 
 def _build_interpretation(rows: List[Dict[str, Any]]) -> List[str]:
     a1 = _find_variant(rows, "a1")
+    a3 = _find_variant(rows, "a3")
     a4 = _find_variant(rows, "a4")
-    a5 = _find_variant(rows, "a5")
-    a5_noproj = _find_variant(rows, "a5_noproj")
     lines: List[str] = []
 
     if a1 and a4:
         lines.append(
-            "On the current CoT partial slice, first-stage batching is effective for reducing calls, "
-            "but it does not yet preserve evidence-level coverage."
+            "A4 is the main collaborative retrieval path: scope buckets share a first-stage pool, "
+            "then each agent receives reranked results with private fallback if needed."
         )
-    if a5 and a5_noproj:
+    if a3 and a4:
         lines.append(
-            "The projection step still does not show a stable benefit: removing projection keeps recall unchanged "
-            "and yields better ranking quality."
+            "The key comparison is A3 versus A4: A3 measures scope-only sharing, while A4 adds "
+            "personalization and fallback."
         )
-    if a1 and a5:
+    if a1 and a4:
         lines.append(
-            "At this stage, the best recall remains the independent baseline, while partially shared retrieval "
-            "offers a middle ground between efficiency and quality."
+            "A1 remains the independent upper-cost baseline; A4 trades some per-agent isolation for "
+            "fewer first-stage retrieval calls."
         )
     return lines
 

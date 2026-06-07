@@ -12,8 +12,7 @@
 #   RPT        got | cot | tot                  (required)
 #   K          retrieval cutoff for the eval pass (default 10)
 #   WORKERS    build-side parallelism (default 8)
-#   VARIANTS   space-separated list (default: a1 a2 a3 a4 a4_nofb
-#              a4_norerank a5 a5_noproj a5_norerank a6 a7)
+#   VARIANTS   space-separated list (default: a1 a2 a3 a4 a4_nofb a4_norerank)
 #   INCLUDE_S4 1 to also build POLICY_ISOLATED test shard (default 0).
 #              Supported for all rpts (got/cot/tot) since the rpt-S4
 #              contract was lifted; see TreeBuilder/ChainBuilder.
@@ -40,7 +39,7 @@ export PYTHONHASHSEED=0
 : "${RPT:?RPT env var required (got|cot|tot)}"
 K="${K:-10}"
 WORKERS="${WORKERS:-8}"
-VARIANTS="${VARIANTS:-a1 a2 a3 a4 a4_nofb a4_norerank a5 a5_noproj a5_norerank a6 a7}"
+VARIANTS="${VARIANTS:-a1 a2 a3 a4 a4_nofb a4_norerank}"
 INCLUDE_S4="${INCLUDE_S4:-0}"
 S4_FLAG=""
 if [[ "${INCLUDE_S4}" == "1" ]]; then

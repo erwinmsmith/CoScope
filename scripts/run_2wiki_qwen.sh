@@ -22,7 +22,7 @@ mkdir -p "${OUT_DIR}"
 # Collect all shards that actually exist (graph-type mix is build-dependent).
 mapfile -t SHARDS < <(ls ${SHARD_DIR}/s*.jsonl)
 
-VARIANTS="a1 a2 a3 a4 a4_nofb a4_norerank a5 a5_noproj a5_norerank a6 a7"
+VARIANTS="a1 a2 a3 a4 a4_nofb a4_norerank"
 
 run_k() {
   local K=$1

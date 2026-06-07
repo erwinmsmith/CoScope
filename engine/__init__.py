@@ -281,7 +281,7 @@ class CoScope:
 
         if provider_type == "openai":
             try:
-                # Use configured query_embedding_dim for consistency with projection
+                # Use configured query_embedding_dim for deterministic/random providers.
                 return OpenAIEmbeddingProvider(
                     model=self.config.embedding.model_name,
                     api_key=os.getenv("COSCOPE_OPENAI_API_KEY"),
@@ -321,10 +321,7 @@ class CoScope:
         # Build pipeline configuration from CoScope config
         pipeline_config = PipelineConfig(
             query_embedding_dim=self.config.retrieval.query_embedding_dim,
-            projection_dim=self.config.retrieval.projection_dim,
-            svd_rank=self.config.retrieval.svd_rank,
             variant=self.config.retrieval.variant,
-            use_sparse_mask=self.config.retrieval.enable_sparse_mask,
             shared_top_k=self.config.retrieval.shared_top_k,
             rerank_top_k=self.config.retrieval.rerank_top_k,
             enable_rerank=self.config.retrieval.enable_rerank,
@@ -603,8 +600,8 @@ class CoScope:
 
         Args:
             requests: List of retrieval requests
-            fit_projection: Whether to fit projection on this batch
-            variant: Optional experiment variant override (a1, a3, a4, a5)
+            fit_projection: Deprecated compatibility flag; ignored by A1-A4 variants.
+            variant: Optional experiment variant override (a1, a2, a3, a4, a4_nofb, a4_norerank)
 
         Returns:
             List of RetrievalResults

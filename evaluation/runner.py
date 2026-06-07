@@ -1,8 +1,8 @@
 """
 Variant evaluation runner.
 
-Runs the no-training ablation variants (A1/A3/A4/A5) on the same request batch
-and returns comparable metric reports.
+Runs the no-training ablation variants (A1-A4 family) on the same request
+batch and returns comparable metric reports.
 """
 
 from __future__ import annotations
@@ -19,8 +19,6 @@ from evaluation.metrics import evaluate_retrieval
 DEFAULT_VARIANTS = (
     "a1", "a2", "a3",
     "a4", "a4_nofb", "a4_norerank",
-    "a5", "a5_noproj", "a5_norerank",
-    "a6",
 )
 
 

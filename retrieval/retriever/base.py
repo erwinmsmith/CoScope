@@ -13,9 +13,7 @@ if TYPE_CHECKING:
     from core.types import (
         EmbeddingProvider,
         MemoryStore,
-        RetrievedCandidate,
     )
-    from retrieval.projection import ProjectionResult
 
 logger = logging.getLogger(__name__)
 
@@ -63,15 +61,15 @@ class CandidateRetriever(ABC):
     @abstractmethod
     def retrieve(
         self,
-        projection_result: "ProjectionResult",
+        query_representation: Any,
         context: RetrievalContext,
         top_k: int = 50,
     ) -> CandidatePool:
         """
-        Retrieve candidates using projected query representations.
+        Retrieve candidates using a query representation.
 
         Args:
-            projection_result: Result from projection module
+            query_representation: Query vector or another retriever-specific representation
             context: Retrieval context with scope and policy info
             top_k: Number of candidates to retrieve
 
@@ -82,14 +80,14 @@ class CandidateRetriever(ABC):
 
     def batch_retrieve(
         self,
-        projection_results: List["ProjectionResult"],
+        query_representations: List[Any],
         contexts: List[RetrievalContext],
         top_k: int = 50,
     ) -> List[CandidatePool]:
         """Retrieve for multiple queries."""
-        if len(projection_results) != len(contexts):
-            raise ValueError("Mismatched projection results and contexts")
+        if len(query_representations) != len(contexts):
+            raise ValueError("Mismatched query representations and contexts")
         return [
             self.retrieve(pr, ctx, top_k)
-            for pr, ctx in zip(projection_results, contexts)
+            for pr, ctx in zip(query_representations, contexts)
         ]

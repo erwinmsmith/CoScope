@@ -5,7 +5,7 @@ Design notes
 ------------
 This is the "algorithm evaluation" path described in §14.5.1 of the
 experimental design: we replay the ``retrieval_requests`` recorded in each
-episode JSONL, run the CoScope retrieval variants (A1/A3/A4/A5/A8/...) on the
+episode JSONL, run the CoScope retrieval variants (A1-A4 family) on the
 exact same memory snapshot, and compare the returned candidates against the
 ``ground_truth`` stored alongside. No LLM calls happen here; the only variable
 is the retrieval pipeline itself, so the numbers are directly comparable
@@ -345,9 +345,8 @@ def evaluate_jsonl(
         _register_episode_agents(coscope, episode)
         _preload_memories(coscope, episode)
 
-        # Stamp episode_id onto every request.metadata so downstream pipeline
-        # hooks (e.g. _dump_svd_bucket) can group artifacts by episode without
-        # needing to thread a separate kwarg through retrieve(). Idempotent.
+        # Stamp episode_id onto every request.metadata for traceability in
+        # downstream diagnostics. Idempotent.
         for _req in episode.retrieval_requests:
             md = dict(_req.metadata or {})
             md.setdefault("episode_id", episode.episode_id)

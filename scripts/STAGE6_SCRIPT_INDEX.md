@@ -41,7 +41,6 @@ Evaluation:
 scripts/eval_jsonl.py
 scripts/eval_k5_k20_sweep.sh
 scripts/run_stage_a_rpt.sh
-scripts/run_stage_b_dataset.sh
 scripts/run_cot_s4_eval.py
 ```
 
@@ -60,7 +59,6 @@ Data utilities:
 scripts/audit_jsonl.py
 scripts/check_prompt_isolation.py
 scripts/compute_rho.py
-scripts/generate_query_intent.py
 scripts/generate_restricted.py
 scripts/smoke_test.py
 scripts/split_dev.py
@@ -118,24 +116,27 @@ server path:
 ```text
 scripts/coscope_status.sh
 scripts/run_2wiki_qwen.sh
-scripts/run_a8_eval_only.sh
 scripts/run_build_2wiki.sh
 scripts/run_hotpotqa_qwen.sh
 scripts/run_k20_only.sh
 scripts/run_stage_a_qwen.sh
 scripts/run_stage_a_qwen_resume.sh
-scripts/run_stage_b.sh
-scripts/run_stage_b_dataset.sh
 ```
 
 ## Not Kept As Active Scripts
 
 ```text
 CoScope/coscope/scripts/evaluate_episode_variants.py
+scripts/analyze_svd_dumps.py
+scripts/generate_query_intent.py
+scripts/run_a8_eval_only.sh
+scripts/run_stage_b.sh
+scripts/run_stage_b_dataset.sh
 ```
 
-Reason: superseded by `scripts/eval_jsonl.py`, which is the current
-retrieval-only evaluation path used by the paper framework.
+Reason: `evaluate_episode_variants.py` is superseded by `scripts/eval_jsonl.py`.
+The A5-A8/SVD/Stage-B scripts were retired when the active paper path was
+reduced to A1-A4, with A4 as the main method.
 
 ## Verification
 

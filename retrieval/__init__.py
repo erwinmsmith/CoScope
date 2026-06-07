@@ -4,9 +4,6 @@ CoScope Retrieval Pipeline.
 Modular retrieval system with the following sub-modules:
 - encoder: Request normalization and encoding
 - router: Scope-based request bucketing
-- matrix: Query matrix construction
-- projection: Shared subspace projection
-- retriever: Candidate retrieval
 - reranker: Agent-specific reranking
 - fallback: Private scope fallback
 - fusion: Evidence fusion
@@ -30,20 +27,12 @@ from retrieval.router import (
     ScopeRouter,
     RoutingResult,
     RetrievalBucket,
-    HierarchicalRouter,
     OverlapAwareRouter,
 )
-
-# Matrix module
-from retrieval.matrix import QueryMatrixBuilder, QueryMatrix
-
-# Projection module
-from retrieval.projection import SharedProjectionModule, ProjectionConfig
 
 # Retriever module
 from retrieval.retriever import (
     CandidateRetriever,
-    SharedCandidateRetriever,
     CosineSimilarity,
     DotProductSimilarity,
 )
@@ -87,17 +76,9 @@ __all__ = [
     "ScopeRouter",
     "RoutingResult",
     "RetrievalBucket",
-    "HierarchicalRouter",
     "OverlapAwareRouter",
-    # Matrix
-    "QueryMatrixBuilder",
-    "QueryMatrix",
-    # Projection
-    "SharedProjectionModule",
-    "ProjectionConfig",
     # Retriever
     "CandidateRetriever",
-    "SharedCandidateRetriever",
     "CosineSimilarity",
     "DotProductSimilarity",
     # Reranker

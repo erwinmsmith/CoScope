@@ -144,8 +144,7 @@ Structural configuration for the retrieval pipeline:
 ```yaml
 retrieval:
   query_embedding_dim: 1024
-  projection_dim: 256
-  svd_rank: 64
+  variant: "a4"
   shared_top_k: 50
   rerank_top_k: 20
 
@@ -235,16 +234,13 @@ results = coscope.retrieve(requests, variant="a3")
 
 # A4: shared mean retrieval + personalized rerank + private fallback
 results = coscope.retrieve(requests, variant="a4")
-
-# A5: query matrix + unsupervised truncated SVD + rerank + fallback
-results = coscope.retrieve(requests, variant="a5")
 ```
 
 You can also set the default in `config.yaml`:
 
 ```yaml
 retrieval:
-  variant: "a5"
+  variant: "a4"
 ```
 
 ### Minimal Evaluation
@@ -252,7 +248,7 @@ retrieval:
 ```python
 from evaluation import evaluate_retrieval
 
-results = coscope.retrieve(requests, variant="a5")
+results = coscope.retrieve(requests, variant="a4")
 stats = coscope.get_stats()["pipeline_stats"]
 
 gold_by_request = {

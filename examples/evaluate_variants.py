@@ -1,5 +1,5 @@
 """
-Run A1/A3/A4/A5 retrieval variants and print a compact comparison table.
+Run A1-A4 retrieval variants and print a compact comparison table.
 """
 
 from __future__ import annotations

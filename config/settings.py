@@ -41,14 +41,11 @@ def _ensure_env_loaded():
 
 class RetrievalConfig(BaseModel):
     query_embedding_dim: int = 1024
-    projection_dim: int = 256
-    svd_rank: int = 64
-    variant: str = "a5"
+    variant: str = "a4"
     shared_top_k: int = 50
     rerank_top_k: int = 20
     max_batch_size: int = 100
     request_timeout: int = 30
-    enable_sparse_mask: bool = True
     enable_private_fallback: bool = True
     fallback_threshold: int = 5
     enable_rerank: bool = True
@@ -368,17 +365,9 @@ class ConfigLoader:
                 "COSCOPE_QUERY_EMBEDDING_DIM",
                 str(retrieval_data.get("query_embedding_dim", 1024))
             )),
-            "projection_dim": int(os.getenv(
-                "COSCOPE_PROJECTION_DIM",
-                str(retrieval_data.get("projection_dim", 256))
-            )),
-            "svd_rank": int(os.getenv(
-                "COSCOPE_SVD_RANK",
-                str(retrieval_data.get("svd_rank", 64))
-            )),
             "variant": os.getenv(
                 "COSCOPE_RETRIEVAL_VARIANT",
-                str(retrieval_data.get("variant", "a5"))
+                str(retrieval_data.get("variant", "a4"))
             ),
             "shared_top_k": int(os.getenv(
                 "COSCOPE_SHARED_TOP_K",
@@ -396,10 +385,6 @@ class ConfigLoader:
                 "COSCOPE_REQUEST_TIMEOUT",
                 str(retrieval_data.get("request_timeout", 30))
             )),
-            "enable_sparse_mask": os.getenv(
-                "COSCOPE_USE_SPARSE_MASK",
-                str(retrieval_data.get("enable_sparse_mask", True))
-            ).lower() in ("true", "1", "yes"),
             "enable_private_fallback": os.getenv(
                 "COSCOPE_ENABLE_PRIVATE_FALLBACK",
                 str(retrieval_data.get("enable_private_fallback", True))

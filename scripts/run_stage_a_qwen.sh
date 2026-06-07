@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage A-Qwen: 12085 ep MuSiQue x GoT x 11 variants, k in {5,10,20}.
+# Stage A-Qwen: 12085 ep MuSiQue x GoT x 6 variants, k in {5,10,20}.
 # Embedder = DashScope text-embedding-v3 (dim=1024) with disk cache.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -13,7 +13,7 @@ TS=$(date +%Y%m%d_%H%M%S)
 LOG=logs/qwen_full_${TS}.log
 OUT=data/processed/got/musique/test
 CACHE=data/cache/embeddings
-VARIANTS="a1 a2 a3 a4 a4_nofb a4_norerank a5 a5_noproj a5_norerank a6 a7"
+VARIANTS="a1 a2 a3 a4 a4_nofb a4_norerank"
 
 mkdir -p "$CACHE" logs
 
@@ -23,7 +23,7 @@ echo "==========================================" | tee -a "$LOG"
 
 for K in 10 5 20; do
   echo | tee -a "$LOG"
-  echo ">>> [eval k=$K] Qwen text-embedding-v3 on 12085 ep, 11 variants" | tee -a "$LOG"
+  echo ">>> [eval k=$K] Qwen text-embedding-v3 on 12085 ep, 6 variants" | tee -a "$LOG"
   T0=$(date +%s)
   python -m scripts.eval_jsonl \
     --shards "$OUT"/*.jsonl \

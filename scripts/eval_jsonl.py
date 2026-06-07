@@ -5,7 +5,7 @@ Usage
 -----
     python -m scripts.eval_jsonl \\
         --shards tests/tmp/processed/got/musique/dev/*.jsonl \\
-        --variants a1 a3 a4 a5 \\
+        --variants a1 a2 a3 a4 a4_nofb a4_norerank \\
         --k 10 \\
         --output tests/tmp/processed/got/musique/dev/eval_report.json
 
@@ -37,8 +37,6 @@ def _make_engine_factory(
     embedder: str,
     dim: int,
     st_model: str,
-    svd_rank: int = None,
-    dump_svd_artifacts: str = None,
     dashscope_model: str = "text-embedding-v3",
     dashscope_dim: int = 1024,
     cache_path: str = None,
@@ -50,25 +48,12 @@ def _make_engine_factory(
                  semantic signal; first use downloads model weights).
     - 'default': let CoScope pick from config.yaml (may need API keys).
 
-    ``svd_rank`` and ``dump_svd_artifacts`` (if not None) are applied as
-    post-construction overrides on the freshly built pipeline config so each
-    new episode picks them up. Both fields are read at runtime by
-    :meth:`RetrievalPipeline._svd_projection` /
-    :meth:`RetrievalPipeline._retrieve_svd_bucket`.
+    A fresh engine is used per episode so memory and scope state stay isolated.
     """
-    def _apply_overrides(engine):
-        if svd_rank is not None:
-            engine.pipeline.config.svd_rank = int(svd_rank)
-        if dump_svd_artifacts is not None:
-            engine.pipeline.config.dump_svd_artifacts = str(dump_svd_artifacts)
-        return engine
-
     embedder = embedder.lower()
     if embedder == "random":
         def _factory_random():
-            return _apply_overrides(
-                CoScope(embedding_provider=RandomEmbeddingProvider(dimension=dim))
-            )
+            return CoScope(embedding_provider=RandomEmbeddingProvider(dimension=dim))
         return _factory_random
     if embedder == "st":
         # Construct the embedder once; reuse across episodes to avoid
@@ -76,11 +61,11 @@ def _make_engine_factory(
         from embedding import SentenceTransformerEmbedder
         shared_embedder = SentenceTransformerEmbedder(model_name=st_model)
         def _factory_st():
-            return _apply_overrides(CoScope(embedding_provider=shared_embedder))
+            return CoScope(embedding_provider=shared_embedder)
         return _factory_st
     if embedder == "default":
         def _factory_default():
-            return _apply_overrides(CoScope())
+            return CoScope()
         return _factory_default
     if embedder == "dashscope":
         # Real DashScope text-embedding-v3 (paper setup). Wrap in disk
@@ -95,7 +80,7 @@ def _make_engine_factory(
         else:
             shared_embedder = inner
         def _factory_dashscope():
-            return _apply_overrides(CoScope(embedding_provider=shared_embedder))
+            return CoScope(embedding_provider=shared_embedder)
         return _factory_dashscope
     raise ValueError(
         f"Unknown embedder '{embedder}'; expected one of 'random', 'st', 'dashscope', 'default'."
@@ -204,28 +189,6 @@ def main() -> int:
         default="sentence-transformers/all-MiniLM-L6-v2",
         help="sentence-transformers model identifier (used only by --embedder=st).",
     )
-    parser.add_argument(
-        "--svd-rank",
-        type=int,
-        default=None,
-        help="Override PipelineConfig.svd_rank for this run (default: pipeline default 64). "
-             "Use to scan rank in {16,32,64,128,256} for SVD ablations.",
-    )
-    parser.add_argument(
-        "--dump-svd-artifacts",
-        default=None,
-        help="If set to a directory path, the SVD pipeline writes per-bucket "
-             "(Q, S, Z, W, K_proj) npz dumps for offline analysis. Combine with "
-             "--max-episodes-with-dump to limit dump volume.",
-    )
-    parser.add_argument(
-        "--max-episodes-with-dump",
-        type=int,
-        default=None,
-        help="When --dump-svd-artifacts is set, only the first N episodes are "
-             "dumped; later episodes still run normally but skip artifact writes. "
-             "Defaults to dumping all episodes.",
-    )
     args = parser.parse_args()
 
     level = getattr(logging, args.log_level.upper(), logging.WARNING)
@@ -263,26 +226,8 @@ def main() -> int:
         dashscope_model=args.dashscope_model,
         dashscope_dim=args.dashscope_dim,
         cache_path=cache_path,
-        svd_rank=args.svd_rank,
-        dump_svd_artifacts=args.dump_svd_artifacts,
     )
 
-    # Cap how many episodes actually write dumps. evaluate_jsonl invokes
-    # engine_factory exactly once per episode, so a counter wrapped around the
-    # factory is the right place to disable dumps after the cap is reached.
-    if args.dump_svd_artifacts and args.max_episodes_with_dump is not None:
-        _episode_counter = {"n": 0}
-        _orig = engine_factory
-        _cap = int(args.max_episodes_with_dump)
-
-        def _capped_factory():
-            engine = _orig()
-            if _episode_counter["n"] >= _cap:
-                engine.pipeline.config.dump_svd_artifacts = None
-            _episode_counter["n"] += 1
-            return engine
-
-        engine_factory = _capped_factory
     episode_runs, stratified = evaluate_jsonl(
         shard_paths=shard_paths,
         variants=args.variants,

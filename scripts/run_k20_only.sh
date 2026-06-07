@@ -12,7 +12,7 @@ TS=$(date +%Y%m%d_%H%M%S)
 LOG=logs/qwen_k20_${TS}.log
 OUT=data/processed/got/musique/test
 CACHE=data/cache/embeddings
-VARIANTS="a1 a2 a3 a4 a4_nofb a4_norerank a5 a5_noproj a5_norerank a6 a7"
+VARIANTS="a1 a2 a3 a4 a4_nofb a4_norerank"
 
 echo "=== k=20 Qwen eval start: $(date) ===" | tee -a "$LOG"
 T0=$(date +%s)

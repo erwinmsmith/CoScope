@@ -176,7 +176,7 @@ def main() -> int:
     parser.add_argument(
         "--variants",
         nargs="+",
-        default=["a1", "a3", "a4", "a4_nofb", "a4_norerank", "a5", "a5_noproj", "a5_norerank", "a6", "a7", "a8"],
+        default=["a1", "a2", "a3", "a4", "a4_nofb", "a4_norerank"],
     )
     parser.add_argument(
         "--title",
