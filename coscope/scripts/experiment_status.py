@@ -22,6 +22,24 @@ def main() -> int:
     state_dir = Path(args.state_dir).expanduser().resolve()
     database = state_dir / "checkpoint.sqlite3"
     if not database.exists():
+        completed_path = state_dir / "COMPLETED.json"
+        status_path = state_dir / "status.json"
+        if completed_path.exists() and status_path.exists():
+            if args.export_results:
+                parser.error(
+                    "detailed results were purged after successful metric "
+                    "finalization; inspect final_metrics.json"
+                )
+            payload = {
+                "completion": json.loads(
+                    completed_path.read_text(encoding="utf-8")
+                ),
+                "status": json.loads(
+                    status_path.read_text(encoding="utf-8")
+                ),
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0
         parser.error(f"checkpoint not found: {database}")
     checkpoint = ExperimentCheckpoint(database)
     if args.export_results:

@@ -38,11 +38,17 @@ from coscope.evaluation.code_benchmark import (
     EvalPlusDockerEvaluator,
 )
 from coscope.evaluation.factorial_experiment import (
+    DEFAULT_SHARING_ARMS,
+    _factorial_aggregate,
+    _mode_comparisons,
     parse_reasoning_modes,
     parse_sharing_arms,
     run_factorial_task,
 )
-from coscope.evaluation.sharing_ablation import SharingArm
+from coscope.evaluation.sharing_ablation import (
+    SharingArm,
+    _comparisons,
+)
 from coscope.reasoning import ReasoningMode
 
 
@@ -134,7 +140,6 @@ def main() -> int:
     settings.retrieval.validate()
     state_dir = Path(args.state_dir).expanduser().resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint = ExperimentCheckpoint(state_dir / "checkpoint.sqlite3")
     config = {
         "schema_version": 1,
         "purpose": "uniform_reasoning_x_sharing_factorial",
@@ -154,7 +159,20 @@ def main() -> int:
         "embedding_provider": settings.embedding.provider,
         "embedding_model": settings.embedding.model,
         "embedding_dimension": settings.embedding.dimension,
+        "bootstrap_samples": args.bootstrap_samples,
+        "purge_details_after_success": args.purge_details_after_success,
     }
+    completed_path = state_dir / "COMPLETED.json"
+    if completed_path.exists():
+        completed = json.loads(completed_path.read_text(encoding="utf-8"))
+        if completed.get("config") != config:
+            parser.error(
+                "state directory contains a completed experiment with a "
+                "different manifest; use a new state directory"
+            )
+        print(json.dumps(completed, ensure_ascii=False, indent=2))
+        return 0
+    checkpoint = ExperimentCheckpoint(state_dir / "checkpoint.sqlite3")
     fingerprint = checkpoint.initialize_manifest(
         config,
         tasks,
@@ -258,6 +276,10 @@ def main() -> int:
                                 owner_id,
                                 task.task_key,
                                 result,
+                                retain_details=(
+                                    not args.purge_details_after_success
+                                    or task.benchmark == "mbpp_plus"
+                                ),
                             )
                             _append_event(
                                 event_path,
@@ -308,6 +330,31 @@ def main() -> int:
                 event_path,
                 {"event": "results_exported", "records": exported},
             )
+        if exit_code == 0:
+            final_metrics = _build_final_metrics(
+                checkpoint,
+                config,
+                modes,
+                policies,
+                bootstrap_samples=args.bootstrap_samples,
+            )
+            _write_json_atomic(
+                state_dir / "final_metrics.json",
+                final_metrics,
+            )
+            _write_json_atomic(
+                completed_path,
+                {
+                    "status": "completed",
+                    "fingerprint": fingerprint,
+                    "completed_at": time.time(),
+                    "config": config,
+                    "final_metrics": str(
+                        state_dir / "final_metrics.json"
+                    ),
+                },
+            )
+        final_snapshot = checkpoint.status_snapshot()
     finally:
         _write_status(
             checkpoint,
@@ -325,13 +372,16 @@ def main() -> int:
             },
         )
 
+    if exit_code == 0 and args.purge_details_after_success:
+        _purge_intermediate_files(state_dir)
+
     print(
         json.dumps(
             {
                 "state_dir": str(state_dir),
                 "fingerprint": fingerprint,
                 "exit_code": exit_code,
-                "status": checkpoint.status_snapshot(),
+                "status": final_snapshot,
             },
             ensure_ascii=False,
             indent=2,
@@ -376,6 +426,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument("--bootstrap-samples", type=int, default=1_000)
     parser.add_argument("--retry-backoff-seconds", type=float, default=30.0)
     parser.add_argument("--retry-final-failures", action="store_true")
     parser.add_argument("--status-interval", type=float, default=15.0)
@@ -389,6 +440,14 @@ def _parser() -> argparse.ArgumentParser:
         default=os.environ.get("COSCOPE_EVALPLUS_MEMORY", "4g"),
     )
     parser.add_argument("--export-results", action="store_true")
+    parser.add_argument(
+        "--purge-details-after-success",
+        action="store_true",
+        help=(
+            "retain compact metrics during execution, then remove checkpoint "
+            "details after final_metrics.json is committed"
+        ),
+    )
     parser.add_argument("--allow-dirty-code", action="store_true")
     return parser
 
@@ -406,6 +465,7 @@ def _validate_args(
     for name in (
         "workers",
         "max_attempts",
+        "bootstrap_samples",
         "status_interval",
         "coordinator_timeout",
         "evalplus_parallel",
@@ -597,6 +657,102 @@ def _dataset_digest(
                 ).encode("utf-8")
             )
     return digest.hexdigest()
+
+
+def _build_final_metrics(
+    checkpoint: ExperimentCheckpoint,
+    config: dict[str, Any],
+    modes: tuple[ReasoningMode, ...],
+    policies: tuple[SharingArm, ...],
+    *,
+    bootstrap_samples: int,
+) -> dict[str, Any]:
+    benchmark_reports: dict[str, Any] = {}
+    for benchmark in config["benchmarks"]:
+        benchmark_reports[benchmark] = {
+            mode.value: {
+                policy.value: _factorial_aggregate(
+                    list(
+                        checkpoint.iter_metric_records(
+                            benchmark=benchmark,
+                            reasoning_mode=mode.value,
+                            sharing_policy=policy.value,
+                        )
+                    )
+                )
+                for policy in policies
+            }
+            for mode in modes
+        }
+
+    overall: dict[str, dict[str, dict[str, Any]]] = {}
+    comparisons_by_mode: dict[str, Any] = {}
+    for mode in modes:
+        records_by_policy = {
+            policy: list(
+                checkpoint.iter_metric_records(
+                    reasoning_mode=mode.value,
+                    sharing_policy=policy.value,
+                )
+            )
+            for policy in policies
+        }
+        overall[mode.value] = {
+            policy.value: _factorial_aggregate(
+                records_by_policy[policy]
+            )
+            for policy in policies
+        }
+        if set(policies) == set(DEFAULT_SHARING_ARMS):
+            comparisons_by_mode[mode.value] = _comparisons(
+                records_by_policy,
+                overall[mode.value],
+                bootstrap_samples=bootstrap_samples,
+            )
+
+    return {
+        "status": "completed",
+        "completed_at": time.time(),
+        "models": {
+            "llm_provider": config["llm_provider"],
+            "llm": config["llm_model"],
+            "llm_temperature": config["llm_temperature"],
+            "embedding_provider": config["embedding_provider"],
+            "embedding": config["embedding_model"],
+            "embedding_dimension": config["embedding_dimension"],
+        },
+        "design": {
+            "factorial": True,
+            "reasoning_modes": config["reasoning_modes"],
+            "sharing_policies": config["sharing_policies"],
+            "uniform_mode_across_agents": True,
+            "intermediate_details_purged": config[
+                "purge_details_after_success"
+            ],
+        },
+        "run_config": config,
+        "benchmarks": benchmark_reports,
+        "overall": overall,
+        "comparisons_by_mode": comparisons_by_mode,
+        "mode_comparisons_by_sharing_policy": _mode_comparisons(
+            overall,
+            modes,
+            policies,
+        ),
+    }
+
+
+def _purge_intermediate_files(state_dir: Path) -> None:
+    for name in (
+        "checkpoint.sqlite3",
+        "checkpoint.sqlite3-wal",
+        "checkpoint.sqlite3-shm",
+        "events.jsonl",
+        "results.jsonl",
+    ):
+        candidate = state_dir / name
+        if candidate.exists():
+            candidate.unlink()
 
 
 def _code_revision() -> tuple[str, bool]:

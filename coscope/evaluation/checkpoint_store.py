@@ -102,6 +102,7 @@ class ExperimentCheckpoint:
                     next_attempt_at REAL NOT NULL DEFAULT 0,
                     error TEXT,
                     result_zlib BLOB,
+                    metrics_zlib BLOB,
                     answer_f1 REAL,
                     success INTEGER,
                     llm_tokens INTEGER,
@@ -134,6 +135,14 @@ class ExperimentCheckpoint:
                 );
                 """
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(tasks)")
+            }
+            if "metrics_zlib" not in columns:
+                connection.execute(
+                    "ALTER TABLE tasks ADD COLUMN metrics_zlib BLOB"
+                )
 
     def initialize_manifest(
         self,
@@ -350,13 +359,25 @@ class ExperimentCheckpoint:
         owner_id: str,
         task_key: str,
         result: Mapping[str, Any],
+        *,
+        retain_details: bool = True,
     ) -> None:
         serialized = json.dumps(
             dict(result),
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
-        compressed = zlib.compress(serialized, level=6)
+        compressed = (
+            zlib.compress(serialized, level=6) if retain_details else None
+        )
+        compact = zlib.compress(
+            json.dumps(
+                compact_task_metrics(result),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+            level=6,
+        )
         metrics = _result_metrics(result)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -365,7 +386,7 @@ class ExperimentCheckpoint:
                 """
                 UPDATE tasks
                 SET status = 'succeeded', finished_at = ?, worker_id = NULL,
-                    error = NULL, result_zlib = ?,
+                    error = NULL, result_zlib = ?, metrics_zlib = ?,
                     answer_f1 = ?, success = ?, llm_tokens = ?,
                     provider_tokens = ?, embedding_tokens = ?,
                     retrieval_requests = ?, store_queries = ?,
@@ -377,6 +398,7 @@ class ExperimentCheckpoint:
                 (
                     time.time(),
                     compressed,
+                    compact,
                     *metrics,
                     task_key,
                     owner_id,
@@ -533,11 +555,20 @@ class ExperimentCheckpoint:
                 connection.execute(
                     """
                     UPDATE tasks
-                    SET result_zlib = ?, answer_f1 = ?, success = ?
+                    SET result_zlib = ?, metrics_zlib = ?,
+                        answer_f1 = ?, success = ?
                     WHERE task_key = ?
                     """,
                     (
                         zlib.compress(serialized, level=6),
+                        zlib.compress(
+                            json.dumps(
+                                compact_task_metrics(result),
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            ).encode("utf-8"),
+                            level=6,
+                        ),
                         float(metrics["f1"]),
                         int(bool(metrics["success"])),
                         row["task_key"],
@@ -679,6 +710,33 @@ class ExperimentCheckpoint:
             for row in cursor:
                 yield json.loads(zlib.decompress(row["result_zlib"]))
 
+    def iter_metric_records(
+        self,
+        *,
+        benchmark: str | None = None,
+        reasoning_mode: str | None = None,
+        sharing_policy: str | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        clauses = ["status = 'succeeded'", "metrics_zlib IS NOT NULL"]
+        parameters: list[str] = []
+        for column, value in (
+            ("benchmark", benchmark),
+            ("reasoning_mode", reasoning_mode),
+            ("sharing_policy", sharing_policy),
+        ):
+            if value is not None:
+                clauses.append(f"{column} = ?")
+                parameters.append(value)
+        query = (
+            "SELECT metrics_zlib FROM tasks WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY benchmark, example_id, reasoning_mode, sharing_policy"
+        )
+        with self._connect() as connection:
+            cursor = connection.execute(query, parameters)
+            for row in cursor:
+                yield json.loads(zlib.decompress(row["metrics_zlib"]))
+
     def export_results_jsonl(self, output: str | Path) -> int:
         destination = Path(output)
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -763,3 +821,68 @@ def _result_metrics(result: Mapping[str, Any]) -> tuple[Any, ...]:
         int(safety["unauthorized_context_exposure"]),
         float(latency["end_to_end_seconds"]),
     )
+
+
+def compact_task_metrics(result: Mapping[str, Any]) -> dict[str, Any]:
+    """Retain all aggregate inputs while dropping prompts, outputs, and evidence."""
+    return {
+        "benchmark": result["benchmark"],
+        "example_id": result["example_id"],
+        "reasoning_mode": result["reasoning_mode"],
+        "arm": result["arm"],
+        "scores": dict(result["scores"]),
+        "task_success": bool(result["task_success"]),
+        "provider_usage": {
+            "all": dict(result["provider_usage"]["all"]),
+            "by_category": {
+                name: dict(values)
+                for name, values in result["provider_usage"][
+                    "by_category"
+                ].items()
+            },
+        },
+        "retrieval": {
+            key: result["retrieval"][key]
+            for key in (
+                "requests",
+                "groups",
+                "shared_store_queries",
+                "private_store_queries",
+                "store_queries",
+                "shared_recall_savings",
+                "fallback_triggers",
+                "recall_at_10",
+                "mrr_at_10",
+                "latency_seconds",
+            )
+        },
+        "context": {
+            key: result["context"][key]
+            for key in (
+                "selected_items",
+                "mean_duplicate_evidence_rate",
+                "polluted_items",
+                "pollution_rate",
+                "private_thinking_exposure",
+                "cross_role_knowledge_exposure",
+            )
+        },
+        "safety": dict(result["safety"]),
+        "data_flow": {
+            agent_id: {
+                "private_memory_id": flow.get("private_memory_id"),
+                "published_memory_id": flow.get("published_memory_id"),
+            }
+            for agent_id, flow in result["data_flow"].items()
+        },
+        "generation_budget": dict(result["generation_budget"]),
+        "latency": dict(result["latency"]),
+        "reasoning": {
+            agent_id: {
+                "node_count": values["node_count"],
+                "generated_thoughts": values["generated_thoughts"],
+                "llm_calls": values["llm_calls"],
+            }
+            for agent_id, values in result["reasoning"].items()
+        },
+    }

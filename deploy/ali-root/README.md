@@ -76,13 +76,20 @@ result was committed may repeat that one in-flight condition. Completed
 conditions are exactly-once from the runner's perspective; interruption risk
 is bounded to the active `--workers` conditions.
 
+The installed service enables `--purge-details-after-success`. During the run,
+non-code tasks retain only compact aggregate inputs; MBPP predictions remain
+until EvalPlus finishes. After `final_metrics.json` and `COMPLETED.json` are
+atomically committed, the runner deletes SQLite, WAL, event, and detailed
+result files. The completion marker prevents a later service restart from
+recreating and rerunning the experiment.
+
 Stop cleanly with `systemctl stop coscope-factorial`; active requests finish
 and checkpoint before exit. Do not deploy a different Git revision into the
 same state directory. Use a new run directory for changed code or experiment
 options, because the manifest fingerprint deliberately rejects mixed runs.
 
-Detailed completed records remain compressed in SQLite. Export them when
-needed:
+Without the purge option, detailed completed records remain compressed in
+SQLite and can be exported when needed:
 
 ```bash
 .venv/bin/python -m coscope.scripts.experiment_status \

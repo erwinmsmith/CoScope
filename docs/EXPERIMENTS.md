@@ -135,6 +135,7 @@ repeat successful provider calls:
 python -m coscope.scripts.run_cloud_factorial \
   --full --confirm-full-run \
   --workers 4 \
+  --purge-details-after-success \
   --env-file /etc/coscope/coscope.env \
   --data-root /var/lib/coscope/data \
   --state-dir /var/lib/coscope/runs/factorial-v1
@@ -150,6 +151,12 @@ Because provider calls and SQLite cannot share a transaction, a hard kill may
 repeat an in-flight condition whose response was not checkpointed; it cannot
 repeat a condition already marked `succeeded`. At most `--workers` conditions
 are exposed to this unavoidable provider-side ambiguity.
+
+With `--purge-details-after-success`, the runner retains compact metric inputs
+instead of full non-code task details. Once official MBPP scoring and final
+aggregation finish, it atomically writes `final_metrics.json` plus
+`COMPLETED.json`, then removes the checkpoint, WAL, event log, and detailed
+results. The completion marker makes subsequent starts idempotent.
 
 Inspect progress without stopping the run:
 

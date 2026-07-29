@@ -15,24 +15,77 @@ from coscope.evaluation.code_benchmark import CodeScore
 
 def _result() -> dict:
     return {
-        "scores": {"f1": 1.0},
+        "benchmark": "gsm8k",
+        "example_id": "sample-1",
+        "reasoning_mode": "cot",
+        "arm": "coscope",
+        "scores": {
+            "em": 1.0,
+            "f1": 1.0,
+            "accuracy": 1.0,
+            "success": 1.0,
+        },
         "task_success": True,
         "provider_usage": {
-            "all": {"total_tokens": 21},
+            "all": {"calls": 2, "total_tokens": 21},
             "by_category": {
-                "llm": {"total_tokens": 15},
-                "embedding": {"total_tokens": 6},
+                "llm": {
+                    "calls": 1,
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "reasoning_tokens": 2,
+                    "cached_tokens": 0,
+                    "total_tokens": 15,
+                },
+                "embedding": {
+                    "calls": 1,
+                    "prompt_tokens": 6,
+                    "completion_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "cached_tokens": 0,
+                    "total_tokens": 6,
+                },
             },
         },
         "retrieval": {
             "requests": 3,
+            "groups": 1,
             "store_queries": 1,
             "shared_store_queries": 1,
+            "private_store_queries": 0,
+            "shared_recall_savings": 2 / 3,
             "fallback_triggers": 0,
+            "recall_at_10": 1.0,
+            "mrr_at_10": 1.0,
+            "latency_seconds": 0.5,
         },
-        "context": {"pollution_rate": 0.0},
+        "context": {
+            "selected_items": 3,
+            "mean_duplicate_evidence_rate": 0.0,
+            "polluted_items": 0,
+            "pollution_rate": 0.0,
+            "private_thinking_exposure": 0,
+            "cross_role_knowledge_exposure": 0,
+        },
         "safety": {"unauthorized_context_exposure": 0},
-        "latency": {"end_to_end_seconds": 2.5},
+        "data_flow": {
+            "planner": {
+                "private_memory_id": "private",
+                "published_memory_id": "public",
+            }
+        },
+        "generation_budget": {"cap_hits": 0, "agents_at_cap": []},
+        "latency": {
+            "generation_seconds": 2.0,
+            "end_to_end_seconds": 2.5,
+        },
+        "reasoning": {
+            "planner": {
+                "node_count": 1,
+                "generated_thoughts": 1,
+                "llm_calls": 1,
+            }
+        },
     }
 
 
@@ -80,6 +133,30 @@ def test_checkpoint_recovers_running_task_after_stale_owner(
     second = store.claim_tasks("worker-b", limit=1, max_attempts=3)
     assert second[0].task_key == task.task_key
     assert second[0].attempt == 2
+
+
+def test_checkpoint_can_drop_details_but_keep_aggregate_inputs(
+    tmp_path: Path,
+) -> None:
+    store = ExperimentCheckpoint(tmp_path / "checkpoint.sqlite3")
+    task = ExperimentTask.create("gsm8k", "sample-1", "cot", "coscope")
+    store.initialize_manifest({}, [task], include_mbpp_eval=False)
+    store.acquire_coordinator("worker", stale_after_seconds=60)
+    store.claim_tasks("worker", limit=1, max_attempts=2)
+    store.complete_task(
+        "worker",
+        task.task_key,
+        _result(),
+        retain_details=False,
+    )
+
+    assert list(store.iter_results()) == []
+    metrics = list(store.iter_metric_records())
+    assert len(metrics) == 1
+    assert metrics[0]["scores"]["f1"] == 1.0
+    assert metrics[0]["provider_usage"]["by_category"]["llm"][
+        "total_tokens"
+    ] == 15
 
 
 def test_checkpoint_rejects_changed_resume_manifest(tmp_path: Path) -> None:
@@ -134,6 +211,7 @@ def test_evalplus_scores_are_applied_atomically(tmp_path: Path) -> None:
     claimed = store.claim_tasks("worker", limit=1, max_attempts=2)[0]
     result = {
         **_result(),
+        "benchmark": "mbpp_plus",
         "example_id": "mbpp-1",
         "prediction": "def answer():\n    return 1",
     }
