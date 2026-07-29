@@ -2,6 +2,7 @@ from coscope.adapters.embedding import (
     DashScopeEmbedding,
     DeterministicEmbedding,
     EmbeddingAdapter,
+    FastEmbedEmbedding,
     ZhipuEmbedding,
 )
 from coscope.adapters.factory import build_embedding, build_llm
@@ -12,6 +13,7 @@ __all__ = [
     "DeepSeekLLM",
     "DeterministicEmbedding",
     "EmbeddingAdapter",
+    "FastEmbedEmbedding",
     "LLMAdapter",
     "LLMOutput",
     "ZhipuEmbedding",

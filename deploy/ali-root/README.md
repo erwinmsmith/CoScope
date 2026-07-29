@@ -17,7 +17,8 @@ python3.10 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev,bench]"
 
 install -d -m 700 /etc/coscope
-install -d -m 700 /var/lib/coscope/data /var/lib/coscope/runs
+install -d -m 700 \
+  /var/lib/coscope/data /var/lib/coscope/models /var/lib/coscope/runs
 cp .env.example /etc/coscope/coscope.env
 chmod 600 /etc/coscope/coscope.env
 ```
@@ -29,6 +30,19 @@ example:
 ```bash
 rsync -av --partial raw/ root@ALI_HOST:/var/lib/coscope/data/
 ```
+
+Configure the local model cache as
+`/var/lib/coscope/models/fastembed`, initially with
+`COSCOPE_EMBEDDING_LOCAL_FILES_ONLY=false`. Download and validate the model:
+
+```bash
+.venv/bin/python -m coscope.scripts.check_providers \
+  --env-file /etc/coscope/coscope.env
+```
+
+After this succeeds, set `COSCOPE_EMBEDDING_LOCAL_FILES_ONLY=true`. The
+experiment records the ONNX file SHA-256 in its model identity and shares one
+loaded session across all workers.
 
 Run the full no-provider preflight before starting the service:
 
@@ -48,7 +62,7 @@ systemctl daemon-reload
 systemctl enable --now coscope-factorial
 ```
 
-The service runs two task workers. Tune `--workers` conservatively according
+The service runs three task workers. Tune `--workers` conservatively according
 to provider rate limits; it controls concurrent example-condition executions,
 not the internal ToT branch count.
 
@@ -60,7 +74,7 @@ journalctl -u coscope-factorial -f
 
 cd /opt/coscope
 .venv/bin/python -m coscope.scripts.experiment_status \
-  /var/lib/coscope/runs/factorial-v1
+  /var/lib/coscope/runs/factorial-local-bge-v1
 ```
 
 `checkpoint.sqlite3` is the source of truth. `status.json` is replaced
@@ -100,8 +114,9 @@ SQLite and can be exported when needed:
 
 ```bash
 .venv/bin/python -m coscope.scripts.experiment_status \
-  /var/lib/coscope/runs/factorial-v1 \
-  --export-results /var/lib/coscope/runs/factorial-v1/results.jsonl
+  /var/lib/coscope/runs/factorial-local-bge-v1 \
+  --export-results \
+  /var/lib/coscope/runs/factorial-local-bge-v1/results.jsonl
 ```
 
 MBPP-Plus predictions are scored in six checkpointed EvalPlus jobs after

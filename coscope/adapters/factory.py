@@ -3,6 +3,7 @@
 from coscope.adapters.embedding import (
     DashScopeEmbedding,
     EmbeddingAdapter,
+    FastEmbedEmbedding,
     ZhipuEmbedding,
 )
 from coscope.adapters.llm import DeepSeekLLM, LLMAdapter
@@ -23,6 +24,8 @@ def build_embedding(
 ) -> EmbeddingAdapter:
     if settings.provider == "dashscope":
         return DashScopeEmbedding(settings, usage_ledger=usage_ledger)
+    if settings.provider == "fastembed":
+        return FastEmbedEmbedding(settings, usage_ledger=usage_ledger)
     if settings.provider == "zhipu":
         return ZhipuEmbedding(settings, usage_ledger=usage_ledger)
     raise ValueError(f"unsupported embedding provider: {settings.provider}")

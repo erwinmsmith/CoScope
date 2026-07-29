@@ -410,12 +410,12 @@ def _sha256(path: Path) -> str:
 
 
 def _required_secret_names(config: dict[str, Any]) -> list[str]:
-    embedding_key = (
-        "ZHIPU_API_KEY"
-        if config.get("embedding_provider") == "zhipu"
-        else "DASHSCOPE_API_KEY"
-    )
-    return ["DEEPSEEK_API_KEY", embedding_key]
+    names = ["DEEPSEEK_API_KEY"]
+    if config.get("embedding_provider") == "zhipu":
+        names.append("ZHIPU_API_KEY")
+    elif config.get("embedding_provider") == "dashscope":
+        names.append("DASHSCOPE_API_KEY")
+    return names
 
 
 def _safe_environment(env_file: Path) -> dict[str, str]:

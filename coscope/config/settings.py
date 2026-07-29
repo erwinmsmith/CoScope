@@ -82,6 +82,17 @@ def _unit_interval(name: str, value: str) -> float:
     return parsed
 
 
+def _boolean(name: str, value: str) -> bool:
+    normalized = value.strip().casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ProviderConfigurationError(
+        f"{name} must be true/false, yes/no, on/off, or 1/0"
+    )
+
+
 @dataclass(frozen=True)
 class LLMSettings:
     provider: str = "deepseek"
@@ -107,19 +118,23 @@ class LLMSettings:
 
 @dataclass(frozen=True)
 class EmbeddingSettings:
-    provider: str = "dashscope"
+    provider: str = "fastembed"
     api_key: str = ""
-    model: str = "text-embedding-v3"
-    base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    dimension: int = 1024
+    model: str = "BAAI/bge-small-en-v1.5"
+    base_url: str = ""
+    dimension: int = 384
     timeout_seconds: float = 60.0
+    cache_dir: str = "fastembed_cache"
+    threads: int = 2
+    batch_size: int = 32
+    local_files_only: bool = False
 
     def validate(self) -> None:
-        if self.provider not in {"dashscope", "zhipu"}:
+        if self.provider not in {"dashscope", "fastembed", "zhipu"}:
             raise ProviderConfigurationError(
                 f"unsupported embedding provider: {self.provider}"
             )
-        if not self.api_key:
+        if self.provider != "fastembed" and not self.api_key:
             key_name = (
                 "DASHSCOPE_API_KEY"
                 if self.provider == "dashscope"
@@ -130,12 +145,26 @@ class EmbeddingSettings:
             )
         expected_model = {
             "dashscope": "text-embedding-v3",
+            "fastembed": "BAAI/bge-small-en-v1.5",
             "zhipu": "embedding-3",
         }[self.provider]
         if self.model != expected_model:
             raise ProviderConfigurationError(
                 f"{self.provider} embedding model must be {expected_model}"
             )
+        if self.provider == "fastembed":
+            if self.dimension != 384:
+                raise ProviderConfigurationError(
+                    "BAAI/bge-small-en-v1.5 dimension must be 384"
+                )
+            if not self.cache_dir.strip():
+                raise ProviderConfigurationError(
+                    "COSCOPE_EMBEDDING_CACHE_DIR cannot be empty"
+                )
+            if self.threads <= 0 or self.batch_size <= 0:
+                raise ProviderConfigurationError(
+                    "local embedding threads and batch size must be positive"
+                )
         if self.model == "text-embedding-v3" and self.dimension not in {
             512,
             768,
@@ -221,15 +250,26 @@ class CoScopeSettings:
             ),
         )
         embedding_provider = _read(
-            source, "COSCOPE_EMBEDDING_PROVIDER", "dashscope"
+            source, "COSCOPE_EMBEDDING_PROVIDER", "fastembed"
         ).casefold()
-        embedding_model = (
-            "embedding-3" if embedding_provider == "zhipu" else "text-embedding-v3"
-        )
-        embedding_base_url = (
-            "https://open.bigmodel.cn/api/paas/v4"
-            if embedding_provider == "zhipu"
-            else "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        embedding_defaults = {
+            "dashscope": (
+                "text-embedding-v3",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "1024",
+            ),
+            "fastembed": ("BAAI/bge-small-en-v1.5", "", "384"),
+            "zhipu": (
+                "embedding-3",
+                "https://open.bigmodel.cn/api/paas/v4",
+                "1024",
+            ),
+        }
+        embedding_model, embedding_base_url, embedding_dimension = (
+            embedding_defaults.get(
+                embedding_provider,
+                ("", "", "384"),
+            )
         )
         embedding = EmbeddingSettings(
             provider=embedding_provider,
@@ -242,11 +282,36 @@ class CoScopeSettings:
             ).rstrip("/"),
             dimension=_positive_int(
                 "COSCOPE_EMBEDDING_DIMENSION",
-                _read(source, "COSCOPE_EMBEDDING_DIMENSION", "1024"),
+                _read(
+                    source,
+                    "COSCOPE_EMBEDDING_DIMENSION",
+                    embedding_dimension,
+                ),
             ),
             timeout_seconds=_positive_float(
                 "COSCOPE_EMBEDDING_TIMEOUT_SECONDS",
                 _read(source, "COSCOPE_EMBEDDING_TIMEOUT_SECONDS", "60"),
+            ),
+            cache_dir=_read(
+                source,
+                "COSCOPE_EMBEDDING_CACHE_DIR",
+                "fastembed_cache",
+            ),
+            threads=_positive_int(
+                "COSCOPE_EMBEDDING_THREADS",
+                _read(source, "COSCOPE_EMBEDDING_THREADS", "2"),
+            ),
+            batch_size=_positive_int(
+                "COSCOPE_EMBEDDING_BATCH_SIZE",
+                _read(source, "COSCOPE_EMBEDDING_BATCH_SIZE", "32"),
+            ),
+            local_files_only=_boolean(
+                "COSCOPE_EMBEDDING_LOCAL_FILES_ONLY",
+                _read(
+                    source,
+                    "COSCOPE_EMBEDDING_LOCAL_FILES_ONLY",
+                    "false",
+                ),
             ),
         )
         retrieval = RetrievalSettings(

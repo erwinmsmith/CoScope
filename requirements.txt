@@ -2,3 +2,5 @@
 numpy>=1.24
 openai>=2.0
 python-dotenv>=1.0
+# Required when COSCOPE_EMBEDDING_PROVIDER=fastembed.
+fastembed==0.7.4

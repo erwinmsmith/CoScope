@@ -88,6 +88,11 @@ def test_factorial_defaults_use_uniform_cot_and_tot_with_three_sharing_arms(
         agent: metrics["llm_calls"]
         for agent, metrics in cot["reasoning"].items()
     } == {"planner": 1, "solver": 1, "verifier": 1}
+    assert cot["latency"]["embedding_seconds"] == 0.0
+    assert (
+        cot["latency"]["end_to_end_seconds"]
+        <= cot["latency"]["wall_clock_seconds"]
+    )
 
     tot = report["benchmarks"]["hotpotqa"]["tot"]["coscope"]["tasks"][0]
     assert tot["retrieval"]["requests"] == 9

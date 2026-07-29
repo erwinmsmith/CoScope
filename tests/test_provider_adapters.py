@@ -2,7 +2,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from coscope.adapters.embedding import DashScopeEmbedding, ZhipuEmbedding
+from coscope.adapters.embedding import (
+    DashScopeEmbedding,
+    FastEmbedEmbedding,
+    ZhipuEmbedding,
+)
+from coscope.adapters.factory import build_embedding
 from coscope.adapters.llm import DeepSeekLLM
 from coscope.config import (
     CoScopeSettings,
@@ -54,28 +59,31 @@ class _FakeEmbeddingClient:
         self.embeddings = _FakeEmbeddings()
 
 
-def test_live_settings_select_deepseek_flash_and_text_embedding_v3():
+def test_live_settings_select_deepseek_flash_and_local_bge():
     settings = CoScopeSettings.from_env(
         None,
         environ={
             "COSCOPE_RUNTIME_MODE": "live",
             "DEEPSEEK_API_KEY": "deepseek-test",
-            "DASHSCOPE_API_KEY": "dashscope-test",
         },
     )
     assert settings.llm.model == "deepseek-v4-flash"
     assert settings.llm.max_tokens is None
-    assert settings.embedding.model == "text-embedding-v3"
-    assert settings.embedding.dimension == 1024
+    assert settings.embedding.provider == "fastembed"
+    assert settings.embedding.model == "BAAI/bge-small-en-v1.5"
+    assert settings.embedding.dimension == 384
+    assert settings.embedding.threads == 2
+    assert settings.embedding.batch_size == 32
 
 
-def test_live_settings_require_both_provider_keys():
+def test_remote_embedding_settings_require_provider_key():
     with pytest.raises(ProviderConfigurationError, match="DASHSCOPE_API_KEY"):
         CoScopeSettings.from_env(
             None,
             environ={
                 "COSCOPE_RUNTIME_MODE": "live",
                 "DEEPSEEK_API_KEY": "deepseek-test",
+                "COSCOPE_EMBEDDING_PROVIDER": "dashscope",
             },
         )
 
@@ -126,8 +134,10 @@ def test_dashscope_adapter_forwards_dimension_and_restores_input_order():
     client = _FakeEmbeddingClient()
     adapter = DashScopeEmbedding(
         EmbeddingSettings(
+            provider="dashscope",
             api_key="test",
             model="text-embedding-v3",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             dimension=512,
         ),
         client=client,
@@ -171,3 +181,74 @@ def test_zhipu_env_selects_provider_specific_defaults():
     )
     assert settings.embedding.model == "embedding-3"
     assert settings.embedding.base_url == "https://open.bigmodel.cn/api/paas/v4"
+
+
+class _FakeFastEmbedBackend:
+    dimension = 384
+    model_version = (
+        "fastembed:BAAI/bge-small-en-v1.5:384:"
+        "fastembed-test:sha256-0123456789abcdef"
+    )
+    model_sha256 = "0123456789abcdef" * 4
+
+    def embed_many(self, texts):
+        return (
+            [
+                tuple([float(index + 1)] * self.dimension)
+                for index, _ in enumerate(texts)
+            ],
+            7,
+            0.012,
+        )
+
+
+def test_fastembed_adapter_records_local_tokens_and_identity():
+    ledger = UsageLedger()
+    adapter = FastEmbedEmbedding(
+        EmbeddingSettings(
+            provider="fastembed",
+            model="BAAI/bge-small-en-v1.5",
+            dimension=384,
+        ),
+        backend=_FakeFastEmbedBackend(),
+        usage_ledger=ledger,
+    )
+
+    vectors = adapter.embed_many(["first", "second"])
+
+    assert len(vectors) == 2
+    assert all(len(vector) == 384 for vector in vectors)
+    assert adapter.model_version.endswith("sha256-0123456789abcdef")
+    summary = ledger.summary()
+    assert summary["by_category"]["embedding"]["calls"] == 1
+    assert summary["by_category"]["embedding"]["prompt_tokens"] == 7
+    assert summary["events"][0]["metadata"]["execution"] == "local_cpu"
+
+
+def test_fastembed_factory_uses_injected_shared_backend(monkeypatch):
+    from coscope.adapters.embedding import fastembed as fastembed_module
+
+    backends = []
+
+    def create_backend(settings):
+        del settings
+        backend = _FakeFastEmbedBackend()
+        backends.append(backend)
+        return backend
+
+    fastembed_module._BACKENDS.clear()
+    monkeypatch.setattr(fastembed_module, "_OnnxBackend", create_backend)
+    settings = EmbeddingSettings(
+        provider="fastembed",
+        model="BAAI/bge-small-en-v1.5",
+        dimension=384,
+        cache_dir="test-cache",
+    )
+
+    first = build_embedding(settings)
+    second = build_embedding(settings)
+
+    assert isinstance(first, FastEmbedEmbedding)
+    assert first.backend is second.backend
+    assert len(backends) == 1
+    fastembed_module._BACKENDS.clear()

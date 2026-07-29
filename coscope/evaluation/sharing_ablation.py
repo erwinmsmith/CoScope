@@ -732,6 +732,19 @@ def _aggregate(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     total_seconds = sum(
         float(task["latency"]["end_to_end_seconds"]) for task in tasks
     )
+    total_wall_clock_seconds = sum(
+        float(
+            task["latency"].get(
+                "wall_clock_seconds",
+                task["latency"]["end_to_end_seconds"],
+            )
+        )
+        for task in tasks
+    )
+    total_embedding_seconds = sum(
+        float(task["latency"].get("embedding_seconds", 0.0))
+        for task in tasks
+    )
     total_f1 = sum(float(task["scores"]["f1"]) for task in tasks)
     total_provider_tokens = llm["total_tokens"] + embedding["total_tokens"]
     selected = sum(int(task["context"]["selected_items"]) for task in tasks)
@@ -814,6 +827,11 @@ def _aggregate(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             for task in tasks
         ),
         "mean_end_to_end_seconds": total_seconds / len(tasks),
+        "mean_wall_clock_seconds": (
+            total_wall_clock_seconds / len(tasks)
+        ),
+        "mean_embedding_seconds": total_embedding_seconds / len(tasks),
+        "canonical_latency_excludes_embedding": True,
         "quality_per_1k_llm_tokens": (
             total_f1 / (llm["total_tokens"] / 1_000)
             if llm["total_tokens"]

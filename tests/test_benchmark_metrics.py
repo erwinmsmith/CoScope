@@ -49,11 +49,13 @@ def test_usage_ledger_aggregates_categories_and_models():
         "embedding",
         "embedding-3:1024",
         {"prompt_tokens": 4, "total_tokens": 4},
+        metadata={"latency_seconds": "0.125"},
     )
     summary = ledger.summary()
     assert summary["all"]["calls"] == 2
     assert summary["all"]["total_tokens"] == 22
     assert summary["by_category"]["llm"]["reasoning_tokens"] == 5
+    assert ledger.duration_seconds("embedding") == pytest.approx(0.125)
 
 
 def test_threshold_environment_is_injected_into_runtime():

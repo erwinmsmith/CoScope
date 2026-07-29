@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from openai import OpenAI
@@ -36,17 +37,12 @@ class DashScopeEmbedding:
     def embed_many(self, texts: list[str]) -> list[tuple[float, ...]]:
         if not texts:
             return []
+        started = time.perf_counter()
         response = self.client.embeddings.create(
             model=self.settings.model,
             input=texts,
             dimensions=self.settings.dimension,
         )
-        if self.usage_ledger is not None:
-            self.usage_ledger.record(
-                "embedding",
-                self.model_version,
-                usage_values(getattr(response, "usage", None)),
-            )
         ordered = sorted(response.data, key=lambda item: item.index)
         if len(ordered) != len(texts):
             raise RuntimeError(
@@ -57,5 +53,18 @@ class DashScopeEmbedding:
         if any(len(vector) != self.dimension for vector in vectors):
             raise RuntimeError(
                 f"embedding response dimension does not match {self.dimension}"
+            )
+        if self.usage_ledger is not None:
+            self.usage_ledger.record(
+                "embedding",
+                self.model_version,
+                usage_values(getattr(response, "usage", None)),
+                metadata={
+                    "execution": "remote_api",
+                    "input_count": str(len(texts)),
+                    "latency_seconds": (
+                        f"{time.perf_counter() - started:.9f}"
+                    ),
+                },
             )
         return vectors

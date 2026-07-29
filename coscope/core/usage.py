@@ -75,6 +75,21 @@ class UsageLedger:
             "events": [asdict(event) for event in self.events],
         }
 
+    def duration_seconds(self, category: str) -> float:
+        """Sum measured local execution time for one usage category."""
+        total = 0.0
+        for event in self.events:
+            if event.category != category:
+                continue
+            raw = event.metadata.get("latency_seconds")
+            if raw is None:
+                continue
+            try:
+                total += float(raw)
+            except (TypeError, ValueError):
+                continue
+        return total
+
     @staticmethod
     def _totals(events: list[UsageEvent]) -> dict[str, int]:
         return {

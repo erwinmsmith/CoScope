@@ -17,6 +17,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 
+from coscope.adapters import build_embedding
 from coscope.config import CoScopeSettings
 from coscope.evaluation.benchmark_registry import (
     BENCHMARK_LOADERS,
@@ -138,6 +139,9 @@ def main() -> int:
     settings.llm.validate()
     settings.embedding.validate()
     settings.retrieval.validate()
+    embedding_model_version = build_embedding(
+        settings.embedding
+    ).model_version
     state_dir = Path(args.state_dir).expanduser().resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     config = {
@@ -159,8 +163,14 @@ def main() -> int:
         "embedding_provider": settings.embedding.provider,
         "embedding_model": settings.embedding.model,
         "embedding_dimension": settings.embedding.dimension,
+        "embedding_model_version": embedding_model_version,
+        "embedding_threads": settings.embedding.threads,
+        "embedding_batch_size": settings.embedding.batch_size,
         "bootstrap_samples": args.bootstrap_samples,
         "purge_details_after_success": args.purge_details_after_success,
+        "canonical_latency_metric": (
+            "wall_clock_seconds_minus_embedding_seconds"
+        ),
     }
     completed_path = state_dir / "COMPLETED.json"
     if completed_path.exists():
@@ -720,6 +730,9 @@ def _build_final_metrics(
             "embedding_provider": config["embedding_provider"],
             "embedding": config["embedding_model"],
             "embedding_dimension": config["embedding_dimension"],
+            "embedding_model_version": config[
+                "embedding_model_version"
+            ],
         },
         "design": {
             "factorial": True,
@@ -728,6 +741,9 @@ def _build_final_metrics(
             "uniform_mode_across_agents": True,
             "intermediate_details_purged": config[
                 "purge_details_after_success"
+            ],
+            "canonical_latency_metric": config[
+                "canonical_latency_metric"
             ],
         },
         "run_config": config,

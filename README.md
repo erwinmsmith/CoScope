@@ -85,22 +85,26 @@ pytest
 
 ## Live model configuration
 
-Edit the repository-root `.env` to configure both providers:
+Edit the repository-root `.env` to configure DeepSeek generation and the
+local CPU embedding backend:
 
 ```dotenv
 COSCOPE_RUNTIME_MODE=live
 DEEPSEEK_API_KEY=sk-...
 COSCOPE_LLM_MODEL=deepseek-v4-flash
 
-DASHSCOPE_API_KEY=sk-...
-COSCOPE_EMBEDDING_MODEL=text-embedding-v3
-COSCOPE_EMBEDDING_DIMENSION=1024
+COSCOPE_EMBEDDING_PROVIDER=fastembed
+COSCOPE_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+COSCOPE_EMBEDDING_DIMENSION=384
+COSCOPE_EMBEDDING_CACHE_DIR=fastembed_cache
+COSCOPE_EMBEDDING_THREADS=2
 ```
 
-The default DashScope endpoint targets China (Beijing). Set
-`COSCOPE_EMBEDDING_BASE_URL` to the endpoint matching the API key's region.
-Both DashScope `text-embedding-v3` and the attached Zhipu `embedding-3` are
-remote embedding APIs, not locally downloadable models. To use Zhipu instead:
+FastEmbed downloads a quantized ONNX model once, verifies its SHA-256 identity,
+and shares one CPU session across experiment workers. Set
+`COSCOPE_EMBEDDING_LOCAL_FILES_ONLY=true` after the cache is populated.
+DashScope `text-embedding-v3` and Zhipu `embedding-3` remain optional remote
+providers. To use Zhipu instead:
 
 ```dotenv
 ZHIPU_API_KEY=...
@@ -167,8 +171,8 @@ packet = runtime.assemble_context(request, result)
 
 - **Replay:** runs prebuilt requests without invoking an LLM.
 - **Simulated:** executes runtime control flow through `MockExecutor`.
-- **Live:** DeepSeek `deepseek-v4-flash` generation and DashScope
-  `text-embedding-v3` retrieval are configured through `.env`.
+- **Live:** DeepSeek `deepseek-v4-flash` generation and local FastEmbed
+  `BAAI/bge-small-en-v1.5` retrieval are configured through `.env`.
 
 See [Architecture](docs/ARCHITECTURE.md) and [Migration](docs/MIGRATION.md).
 For live token accounting, multi-benchmark scoring, threshold sweeps, and the

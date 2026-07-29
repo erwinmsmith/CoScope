@@ -854,7 +854,10 @@ def compact_task_metrics(result: Mapping[str, Any]) -> dict[str, Any]:
                 "recall_at_10",
                 "mrr_at_10",
                 "latency_seconds",
+                "wall_clock_latency_seconds",
+                "embedding_seconds",
             )
+            if key in result["retrieval"]
         },
         "context": {
             key: result["context"][key]

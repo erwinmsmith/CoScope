@@ -138,7 +138,7 @@ python -m coscope.scripts.run_cloud_factorial \
   --purge-details-after-success \
   --env-file /etc/coscope/coscope.env \
   --data-root /var/lib/coscope/data \
-  --state-dir /var/lib/coscope/runs/factorial-v1
+  --state-dir /var/lib/coscope/runs/factorial-local-bge-v1
 ```
 
 SQLite WAL is the checkpoint source of truth. `status.json` is updated
@@ -162,7 +162,7 @@ Inspect progress without stopping the run:
 
 ```bash
 python -m coscope.scripts.experiment_status \
-  /var/lib/coscope/runs/factorial-v1
+  /var/lib/coscope/runs/factorial-local-bge-v1
 ```
 
 See `deploy/ali-root/README.md` for GitHub, systemd, secret placement, dataset
@@ -280,7 +280,9 @@ Experiments record:
 - embedding calls/input tokens and MAS overhead;
 - retrieval groups, savings, Recall@K, MRR@K, and fallback calls;
 - duplicate context, selected items, and unauthorized exposure;
-- retrieval, generation, and end-to-end latency;
+- retrieval, generation, embedding, and wall-clock latency. The canonical
+  `end_to_end_seconds` metric subtracts measured embedding execution and queue
+  time; `wall_clock_seconds` retains the operational total;
 - reasoning nodes, retained thoughts, and LLM calls for mode comparisons.
 - per-agent effective scopes, selected context sources, private working-memory
   IDs, published-summary IDs, and intended recipients.
