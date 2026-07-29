@@ -63,17 +63,23 @@ class EvalPlusDockerEvaluator:
         artifact_root: str | Path = "new_results/evalplus",
         image: str = DEFAULT_EVALPLUS_IMAGE,
         parallel: int = 2,
+        memory: str = "4g",
         timeout_seconds: int = 3_600,
     ):
         self.dataset_path = Path(dataset_path).resolve()
         self.artifact_root = Path(artifact_root).resolve()
         self.image = image
         self.parallel = parallel
+        self.memory = memory
         self.timeout_seconds = timeout_seconds
         if parallel <= 0:
             raise ValueError("EvalPlus parallelism must be positive")
         if timeout_seconds <= 0:
             raise ValueError("EvalPlus timeout must be positive")
+        if re.fullmatch(r"[1-9]\d*[kmgt](?:i?b)?", memory.casefold()) is None:
+            raise ValueError(
+                "EvalPlus memory must be a Docker size such as 2g or 4096m"
+            )
 
     def evaluate(
         self,
@@ -187,7 +193,7 @@ class EvalPlusDockerEvaluator:
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--pids-limit=512",
-            "--memory=4g",
+            f"--memory={self.memory}",
             "--cpus=2",
             "--tmpfs=/tmp:rw,noexec,nosuid,size=1g",
             "-e",

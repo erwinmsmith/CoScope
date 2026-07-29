@@ -48,7 +48,7 @@ systemctl daemon-reload
 systemctl enable --now coscope-factorial
 ```
 
-The service runs four task workers. Tune `--workers` conservatively according
+The service runs two task workers. Tune `--workers` conservatively according
 to provider rate limits; it controls concurrent example-condition executions,
 not the internal ToT branch count.
 

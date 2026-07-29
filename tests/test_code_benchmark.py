@@ -38,12 +38,14 @@ def test_evalplus_command_has_host_isolation_boundaries(tmp_path):
     evaluator = EvalPlusDockerEvaluator(
         tmp_path / "MbppPlus.jsonl.gz",
         artifact_root=tmp_path,
+        memory="2g",
     )
     command = evaluator._docker_command(Path("/tmp/evalplus-run"))
     assert "--network=none" in command
     assert "--read-only" in command
     assert "--cap-drop=ALL" in command
     assert "--security-opt=no-new-privileges" in command
+    assert "--memory=2g" in command
     assert "evalplus.evaluate" in command
 
 

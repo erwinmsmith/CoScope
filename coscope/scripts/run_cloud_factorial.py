@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import threading
@@ -383,6 +384,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--evalplus-artifact-dir")
     parser.add_argument("--evalplus-parallel", type=int, default=2)
     parser.add_argument("--evalplus-jobs", type=int, default=1)
+    parser.add_argument(
+        "--evalplus-memory",
+        default=os.environ.get("COSCOPE_EVALPLUS_MEMORY", "4g"),
+    )
     parser.add_argument("--export-results", action="store_true")
     parser.add_argument("--allow-dirty-code", action="store_true")
     return parser
@@ -410,6 +415,14 @@ def _validate_args(
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.retry_backoff_seconds < 0:
         parser.error("--retry-backoff-seconds cannot be negative")
+    if (
+        re.fullmatch(
+            r"[1-9]\d*[kmgt](?:i?b)?",
+            args.evalplus_memory.casefold(),
+        )
+        is None
+    ):
+        parser.error("--evalplus-memory must be a Docker size such as 2g")
     for cap in (
         args.max_output_tokens,
         args.musique_max_output_tokens,
@@ -461,6 +474,7 @@ def _run_evalplus_jobs(
         artifact_root=artifact_dir,
         image=args.evalplus_image,
         parallel=args.evalplus_parallel,
+        memory=args.evalplus_memory,
     )
     example_list = examples["mbpp_plus"]
     futures: dict[Future[dict[str, Any]], ClaimedEvalJob] = {}
