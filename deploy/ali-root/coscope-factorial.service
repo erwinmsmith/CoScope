@@ -1,0 +1,23 @@
+[Unit]
+Description=CoScope durable factorial experiment
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/coscope
+EnvironmentFile=/etc/coscope/coscope.env
+ExecStart=/opt/coscope/.venv/bin/python -m coscope.scripts.run_cloud_factorial --full --confirm-full-run --workers 4 --state-dir /var/lib/coscope/runs/factorial-v1 --data-root /var/lib/coscope/data
+Restart=on-failure
+RestartSec=30
+KillSignal=SIGTERM
+TimeoutStopSec=3600
+StateDirectory=coscope
+ReadWritePaths=/var/lib/coscope
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
