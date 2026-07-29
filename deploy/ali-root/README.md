@@ -88,6 +88,13 @@ and checkpoint before exit. Do not deploy a different Git revision into the
 same state directory. Use a new run directory for changed code or experiment
 options, because the manifest fingerprint deliberately rejects mixed runs.
 
+For a server cutover, follow
+[`docs/CLOUD_MIGRATION.md`](../../docs/CLOUD_MIGRATION.md). The migration
+command creates an integrity-checked SQLite snapshot and verifies the exact
+Git revision, dataset hashes, and non-secret runtime settings on the target.
+It intentionally excludes provider keys and dataset contents. Stop the source
+before export, and do not start it again after the target begins writing.
+
 Without the purge option, detailed completed records remain compressed in
 SQLite and can be exported when needed:
 
