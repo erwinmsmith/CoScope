@@ -98,10 +98,12 @@ COSCOPE_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 COSCOPE_EMBEDDING_DIMENSION=384
 COSCOPE_EMBEDDING_CACHE_DIR=fastembed_cache
 COSCOPE_EMBEDDING_THREADS=2
+COSCOPE_EMBEDDING_RESULT_CACHE_SIZE=4096
 ```
 
 FastEmbed downloads a quantized ONNX model once, verifies its SHA-256 identity,
-and shares one CPU session across experiment workers. Set
+shares one CPU session across experiment workers, and uses a bounded result
+cache for repeated text across factorial arms. Set
 `COSCOPE_EMBEDDING_LOCAL_FILES_ONLY=true` after the cache is populated.
 DashScope `text-embedding-v3` and Zhipu `embedding-3` remain optional remote
 providers. To use Zhipu instead:

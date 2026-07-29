@@ -42,7 +42,10 @@ Configure the local model cache as
 
 After this succeeds, set `COSCOPE_EMBEDDING_LOCAL_FILES_ONLY=true`. The
 experiment records the ONNX file SHA-256 in its model identity and shares one
-loaded session across all workers.
+loaded session across all workers. The default 4,096-entry result cache is
+bounded and only avoids deterministic re-embedding across factorial arms;
+embedding time is separately recorded and excluded from the canonical
+end-to-end comparison metric.
 
 Run the full no-provider preflight before starting the service:
 

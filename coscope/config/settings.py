@@ -127,6 +127,7 @@ class EmbeddingSettings:
     cache_dir: str = "fastembed_cache"
     threads: int = 2
     batch_size: int = 32
+    result_cache_size: int = 4096
     local_files_only: bool = False
 
     def validate(self) -> None:
@@ -161,9 +162,14 @@ class EmbeddingSettings:
                 raise ProviderConfigurationError(
                     "COSCOPE_EMBEDDING_CACHE_DIR cannot be empty"
                 )
-            if self.threads <= 0 or self.batch_size <= 0:
+            if (
+                self.threads <= 0
+                or self.batch_size <= 0
+                or self.result_cache_size <= 0
+            ):
                 raise ProviderConfigurationError(
-                    "local embedding threads and batch size must be positive"
+                    "local embedding threads, batch size, and result cache "
+                    "size must be positive"
                 )
         if self.model == "text-embedding-v3" and self.dimension not in {
             512,
@@ -304,6 +310,14 @@ class CoScopeSettings:
             batch_size=_positive_int(
                 "COSCOPE_EMBEDDING_BATCH_SIZE",
                 _read(source, "COSCOPE_EMBEDDING_BATCH_SIZE", "32"),
+            ),
+            result_cache_size=_positive_int(
+                "COSCOPE_EMBEDDING_RESULT_CACHE_SIZE",
+                _read(
+                    source,
+                    "COSCOPE_EMBEDDING_RESULT_CACHE_SIZE",
+                    "4096",
+                ),
             ),
             local_files_only=_boolean(
                 "COSCOPE_EMBEDDING_LOCAL_FILES_ONLY",

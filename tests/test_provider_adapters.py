@@ -199,6 +199,8 @@ class _FakeFastEmbedBackend:
             ],
             7,
             0.012,
+            1,
+            1,
         )
 
 
@@ -223,6 +225,7 @@ def test_fastembed_adapter_records_local_tokens_and_identity():
     assert summary["by_category"]["embedding"]["calls"] == 1
     assert summary["by_category"]["embedding"]["prompt_tokens"] == 7
     assert summary["events"][0]["metadata"]["execution"] == "local_cpu"
+    assert summary["events"][0]["metadata"]["result_cache_hits"] == "1"
 
 
 def test_fastembed_factory_uses_injected_shared_backend(monkeypatch):

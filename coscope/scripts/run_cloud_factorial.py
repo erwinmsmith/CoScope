@@ -166,6 +166,9 @@ def main() -> int:
         "embedding_model_version": embedding_model_version,
         "embedding_threads": settings.embedding.threads,
         "embedding_batch_size": settings.embedding.batch_size,
+        "embedding_result_cache_size": (
+            settings.embedding.result_cache_size
+        ),
         "bootstrap_samples": args.bootstrap_samples,
         "purge_details_after_success": args.purge_details_after_success,
         "canonical_latency_metric": (

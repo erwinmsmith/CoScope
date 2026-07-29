@@ -6,6 +6,7 @@ import hashlib
 import importlib.metadata
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -21,7 +22,13 @@ class FastEmbedBackend(Protocol):
     def embed_many(
         self,
         texts: list[str],
-    ) -> tuple[list[tuple[float, ...]], int, float]: ...
+    ) -> tuple[
+        list[tuple[float, ...]],
+        int,
+        float,
+        int,
+        int,
+    ]: ...
 
 
 class _OnnxBackend:
@@ -38,7 +45,12 @@ class _OnnxBackend:
 
         self.dimension = settings.dimension
         self.batch_size = settings.batch_size
+        self.result_cache_size = settings.result_cache_size
         self._lock = threading.Lock()
+        self._result_cache: OrderedDict[
+            str,
+            tuple[float, ...],
+        ] = OrderedDict()
         self._model = TextEmbedding(
             model_name=settings.model,
             cache_dir=settings.cache_dir,
@@ -62,27 +74,54 @@ class _OnnxBackend:
     def embed_many(
         self,
         texts: list[str],
-    ) -> tuple[list[tuple[float, ...]], int, float]:
+    ) -> tuple[
+        list[tuple[float, ...]],
+        int,
+        float,
+        int,
+        int,
+    ]:
         started = time.perf_counter()
         with self._lock:
             token_count = int(self._model.token_count(texts))
-            arrays = list(
-                self._model.embed(
-                    texts,
-                    batch_size=self.batch_size,
-                    parallel=None,
+            missing = list(
+                dict.fromkeys(
+                    text
+                    for text in texts
+                    if text not in self._result_cache
                 )
             )
-        vectors = [
-            tuple(float(value) for value in array)
-            for array in arrays
-        ]
+            arrays = (
+                list(
+                    self._model.embed(
+                        missing,
+                        batch_size=self.batch_size,
+                        parallel=None,
+                    )
+                )
+                if missing
+                else []
+            )
+            for text, array in zip(missing, arrays, strict=True):
+                self._result_cache[text] = tuple(
+                    float(value) for value in array
+                )
+                self._result_cache.move_to_end(text)
+            vectors = []
+            for text in texts:
+                vector = self._result_cache[text]
+                self._result_cache.move_to_end(text)
+                vectors.append(vector)
+            while len(self._result_cache) > self.result_cache_size:
+                self._result_cache.popitem(last=False)
         elapsed = time.perf_counter() - started
-        return vectors, token_count, elapsed
+        misses = len(missing)
+        hits = len(texts) - misses
+        return vectors, token_count, elapsed, hits, misses
 
 
 _BACKENDS: dict[
-    tuple[str, int, str, int, int, bool],
+    tuple[str, int, str, int, int, int, bool],
     FastEmbedBackend,
 ] = {}
 _BACKENDS_LOCK = threading.Lock()
@@ -96,6 +135,7 @@ def _shared_backend(settings: EmbeddingSettings) -> FastEmbedBackend:
         cache_dir,
         settings.threads,
         settings.batch_size,
+        settings.result_cache_size,
         settings.local_files_only,
     )
     with _BACKENDS_LOCK:
@@ -132,7 +172,13 @@ class FastEmbedEmbedding:
     def embed_many(self, texts: list[str]) -> list[tuple[float, ...]]:
         if not texts:
             return []
-        vectors, token_count, elapsed = self.backend.embed_many(texts)
+        (
+            vectors,
+            token_count,
+            elapsed,
+            cache_hits,
+            cache_misses,
+        ) = self.backend.embed_many(texts)
         if len(vectors) != len(texts):
             raise RuntimeError(
                 f"local embedding count mismatch: expected {len(texts)}, "
@@ -155,6 +201,8 @@ class FastEmbedEmbedding:
                     "input_count": str(len(texts)),
                     "latency_seconds": f"{elapsed:.9f}",
                     "model_sha256": self.model_sha256,
+                    "result_cache_hits": str(cache_hits),
+                    "result_cache_misses": str(cache_misses),
                 },
             )
         return vectors
