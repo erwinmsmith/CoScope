@@ -22,12 +22,22 @@ experiment—not the newest branch head:
 git -C /opt/coscope checkout <recorded-code-revision>
 ```
 
+If that revision predates this helper, copy the standalone helper from a
+current control checkout to both servers without changing `/opt/coscope`:
+
+```bash
+scp coscope/scripts/migrate_cloud_run.py \
+  root@HOST:/usr/local/sbin/coscope-migrate-cloud-run.py
+ssh root@HOST chmod 700 /usr/local/sbin/coscope-migrate-cloud-run.py
+```
+
 ## 2. Stop and export the source
 
 ```bash
 systemctl stop coscope-factorial
 
-/opt/coscope/.venv/bin/python -m coscope.scripts.migrate_cloud_run export \
+/opt/coscope/.venv/bin/python \
+  /usr/local/sbin/coscope-migrate-cloud-run.py export \
   --state-dir /var/lib/coscope/runs/factorial-v1 \
   --data-root /var/lib/coscope/data \
   --env-file /etc/coscope/coscope.env \
@@ -43,7 +53,8 @@ also passes `PRAGMA integrity_check`.
 Transfer the bundle and data with `rsync -a --checksum`. On the target:
 
 ```bash
-/opt/coscope/.venv/bin/python -m coscope.scripts.migrate_cloud_run restore \
+/opt/coscope/.venv/bin/python \
+  /usr/local/sbin/coscope-migrate-cloud-run.py restore \
   --bundle-dir /var/lib/coscope/migrations/factorial-v1-cutover \
   --data-root /var/lib/coscope/data \
   --env-file /etc/coscope/coscope.env \
