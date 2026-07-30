@@ -158,8 +158,16 @@ class CoScopeRuntime:
 
     def close(self, *, purge_memory: bool = False) -> None:
         """Release task-local memory, optionally removing its DB namespace."""
-        if purge_memory:
-            self.memory.clear()
+        try:
+            if purge_memory:
+                self.memory.clear()
+        finally:
+            # Live factorial tasks construct an SDK client per isolated runtime.
+            # Closing it here prevents finished HTTP connections from remaining
+            # in CLOSE_WAIT for the lifetime of the experiment coordinator.
+            close = getattr(self.llm, "close", None)
+            if callable(close):
+                close()
 
     def live_executor(
         self, *, system_instructions: tuple[str, ...] = ()

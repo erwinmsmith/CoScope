@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from coscope import CoScopeRuntime
 from coscope.adapters.embedding import (
     DashScopeEmbedding,
     FastEmbedEmbedding,
@@ -37,6 +38,10 @@ class _FakeCompletions:
 class _FakeLLMClient:
     def __init__(self):
         self.chat = SimpleNamespace(completions=_FakeCompletions())
+        self.close_calls = 0
+
+    def close(self):
+        self.close_calls += 1
 
 
 class _FakeEmbeddings:
@@ -114,6 +119,17 @@ def test_deepseek_adapter_forwards_an_explicit_output_cap():
     adapter.invoke([{"role": "user", "content": "question"}])
 
     assert client.chat.completions.arguments["max_tokens"] == 1234
+
+
+def test_runtime_close_releases_deepseek_http_client_once() -> None:
+    client = _FakeLLMClient()
+    adapter = DeepSeekLLM(LLMSettings(api_key="test"), client=client)
+    runtime = CoScopeRuntime(llm=adapter)
+
+    runtime.close()
+    runtime.close()
+
+    assert client.close_calls == 1
 
 
 def test_empty_output_cap_environment_value_means_unset():

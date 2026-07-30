@@ -29,6 +29,7 @@ class DeepSeekLLM:
             base_url=settings.base_url,
             timeout=settings.timeout_seconds,
         )
+        self._closed = False
 
     def invoke(self, messages: list[dict[str, str]]) -> LLMOutput:
         request: dict[str, Any] = {
@@ -49,3 +50,12 @@ class DeepSeekLLM:
             text=message.content or "",
             usage=usage,
         )
+
+    def close(self) -> None:
+        """Release the SDK HTTP transport after a task-local runtime ends."""
+        if self._closed:
+            return
+        close = getattr(self.client, "close", None)
+        if callable(close):
+            close()
+        self._closed = True
