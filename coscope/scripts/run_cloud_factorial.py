@@ -210,6 +210,7 @@ def main() -> int:
         config,
         tasks,
         include_mbpp_eval="mbpp_plus" in requested,
+        allow_code_revision_change=args.allow_code_revision_change,
     )
     owner_id = f"{os.uname().nodename}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
     try:
@@ -487,6 +488,14 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--allow-dirty-code", action="store_true")
+    parser.add_argument(
+        "--allow-code-revision-change",
+        action="store_true",
+        help=(
+            "resume only when the Git revision is the sole manifest change; "
+            "records the revision transition in checkpoint metadata"
+        ),
+    )
     return parser
 
 

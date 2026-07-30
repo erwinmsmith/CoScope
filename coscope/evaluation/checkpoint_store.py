@@ -191,10 +191,12 @@ class ExperimentCheckpoint:
         tasks: Iterable[ExperimentTask],
         *,
         include_mbpp_eval: bool,
+        allow_code_revision_change: bool = False,
     ) -> str:
         task_list = list(tasks)
+        config_value = dict(config)
         manifest = {
-            "config": config,
+            "config": config_value,
             "task_keys": sorted(task.task_key for task in task_list),
         }
         serialized = json.dumps(
@@ -211,9 +213,49 @@ class ExperimentCheckpoint:
                 "SELECT value FROM metadata WHERE key = 'fingerprint'"
             ).fetchone()
             if existing is not None and existing["value"] != fingerprint:
-                raise CheckpointMismatchError(
-                    "checkpoint manifest differs from this launch; use a new "
-                    "state directory or resume with identical options"
+                if not allow_code_revision_change:
+                    raise CheckpointMismatchError(
+                        "checkpoint manifest differs from this launch; use a "
+                        "new state directory or resume with identical options"
+                    )
+                stored_config_raw = self._metadata(connection, "config")
+                stored_task_keys = {
+                    str(row["task_key"])
+                    for row in connection.execute("SELECT task_key FROM tasks")
+                }
+                requested_task_keys = {
+                    task.task_key for task in task_list
+                }
+                stored_config = (
+                    json.loads(stored_config_raw)
+                    if stored_config_raw is not None
+                    else None
+                )
+                if (
+                    stored_config is None
+                    or _without_code_revision(stored_config)
+                    != _without_code_revision(config_value)
+                    or stored_task_keys != requested_task_keys
+                ):
+                    raise CheckpointMismatchError(
+                        "checkpoint differs by more than code revision; use a "
+                        "new state directory"
+                    )
+                self._set_metadata(connection, "fingerprint", fingerprint)
+                self._set_metadata(
+                    connection,
+                    "config",
+                    json.dumps(
+                        config_value,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                )
+                _record_code_revision_change(
+                    connection,
+                    previous=stored_config.get("code_revision"),
+                    current=config_value.get("code_revision"),
+                    at=now,
                 )
             connection.execute(
                 "INSERT OR IGNORE INTO metadata(key, value) VALUES('fingerprint', ?)",
@@ -223,7 +265,7 @@ class ExperimentCheckpoint:
                 "INSERT OR IGNORE INTO metadata(key, value) VALUES('config', ?)",
                 (
                     json.dumps(
-                        dict(config),
+                        config_value,
                         ensure_ascii=False,
                         sort_keys=True,
                     ),
@@ -888,6 +930,37 @@ def _result_metrics(result: Mapping[str, Any]) -> tuple[Any, ...]:
         float(context["pollution_rate"]),
         int(safety["unauthorized_context_exposure"]),
         float(latency["end_to_end_seconds"]),
+    )
+
+
+def _without_code_revision(config: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        str(key): value
+        for key, value in config.items()
+        if key != "code_revision"
+    }
+
+
+def _record_code_revision_change(
+    connection: sqlite3.Connection,
+    *,
+    previous: Any,
+    current: Any,
+    at: float,
+) -> None:
+    if previous == current:
+        return
+    raw_history = connection.execute(
+        "SELECT value FROM metadata WHERE key = 'code_revision_history'"
+    ).fetchone()
+    history = json.loads(raw_history["value"]) if raw_history else []
+    history.append({"previous": previous, "current": current, "at": at})
+    connection.execute(
+        """
+        INSERT INTO metadata(key, value) VALUES('code_revision_history', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (json.dumps(history, ensure_ascii=False, sort_keys=True),),
     )
 
 

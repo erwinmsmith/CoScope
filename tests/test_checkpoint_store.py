@@ -226,6 +226,41 @@ def test_checkpoint_rejects_changed_resume_manifest(tmp_path: Path) -> None:
         )
 
 
+def test_checkpoint_allows_only_an_explicit_code_revision_change(
+    tmp_path: Path,
+) -> None:
+    store = ExperimentCheckpoint(tmp_path / "checkpoint.sqlite3")
+    task = ExperimentTask.create("gsm8k", "sample-1", "cot", "coscope")
+    initial = {"code_revision": "old", "threshold": 0.75}
+    updated = {"code_revision": "new", "threshold": 0.75}
+    initial_fingerprint = store.initialize_manifest(
+        initial,
+        [task],
+        include_mbpp_eval=False,
+    )
+
+    updated_fingerprint = store.initialize_manifest(
+        updated,
+        [task],
+        include_mbpp_eval=False,
+        allow_code_revision_change=True,
+    )
+
+    assert updated_fingerprint != initial_fingerprint
+    assert store.initialize_manifest(
+        updated,
+        [task],
+        include_mbpp_eval=False,
+    ) == updated_fingerprint
+    with pytest.raises(CheckpointMismatchError, match="more than code revision"):
+        store.initialize_manifest(
+            {"code_revision": "newer", "threshold": 0.90},
+            [task],
+            include_mbpp_eval=False,
+            allow_code_revision_change=True,
+        )
+
+
 def test_checkpoint_failure_retries_then_stops(tmp_path: Path) -> None:
     store = ExperimentCheckpoint(tmp_path / "checkpoint.sqlite3")
     task = ExperimentTask.create("gsm8k", "sample-1", "cot", "coscope")

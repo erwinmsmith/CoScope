@@ -89,6 +89,11 @@ query per agent/node/branch. The fixed seed is stored in the manifest so the
 sample is reproducible. Tune `--workers` conservatively according to provider
 and Qdrant resource limits.
 
+The installed pilot service includes `--allow-code-revision-change` so an
+operational-only hotfix can resume its checkpoint. This remains strict: it
+permits only the Git revision to change, records the transition in checkpoint
+metadata, and rejects changes to data, models, limits, thresholds, or tasks.
+
 ## Progress and recovery
 
 ```bash
