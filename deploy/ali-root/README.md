@@ -62,13 +62,14 @@ bounded and only avoids deterministic re-embedding across factorial arms;
 embedding time is separately recorded and excluded from the canonical
 end-to-end comparison metric.
 
-Run the full no-provider preflight before starting the service:
+Run the deterministic pilot preflight before starting the service. The
+deployed service samples ten examples from each benchmark:
 
 ```bash
 cd /opt/coscope
 .venv/bin/python -m coscope.scripts.preflight_experiment \
-  --workflow factorial --full --data-root /var/lib/coscope/data \
-  --output /var/lib/coscope/runs/full-preflight.json
+  --workflow factorial --limit 10 --data-root /var/lib/coscope/data \
+  --output /var/lib/coscope/runs/factorial-pilot-qdrant-v1/preflight.json
 ```
 
 Install the checkpointed runner:
@@ -80,11 +81,13 @@ systemctl daemon-reload
 systemctl enable --now coscope-factorial
 ```
 
-The service runs the 2 reasoning modes × 3 sharing policies × 2 retrieval
-execution modes matrix with three task workers. Batched conditions issue one
-scope-filtered vector query per compatible group. Independent conditions issue
-one uncached vector query per agent/node/branch. Tune `--workers`
-conservatively according to provider and Qdrant resource limits.
+The service runs 80 sampled examples through the 2 reasoning modes × 3 sharing
+policies × 2 retrieval execution modes matrix, producing 960 paired task
+records with three workers. Batched conditions issue one scope-filtered vector
+query per compatible group. Independent conditions issue one uncached vector
+query per agent/node/branch. The fixed seed is stored in the manifest so the
+sample is reproducible. Tune `--workers` conservatively according to provider
+and Qdrant resource limits.
 
 ## Progress and recovery
 
@@ -95,7 +98,7 @@ systemctl status coscope-qdrant
 
 cd /opt/coscope
 .venv/bin/python -m coscope.scripts.experiment_status \
-  /var/lib/coscope/runs/factorial-qdrant-v1
+  /var/lib/coscope/runs/factorial-pilot-qdrant-v1
 ```
 
 `checkpoint.sqlite3` is the source of truth. `status.json` is replaced
@@ -135,9 +138,9 @@ SQLite and can be exported when needed:
 
 ```bash
 .venv/bin/python -m coscope.scripts.experiment_status \
-  /var/lib/coscope/runs/factorial-qdrant-v1 \
+  /var/lib/coscope/runs/factorial-pilot-qdrant-v1 \
   --export-results \
-  /var/lib/coscope/runs/factorial-qdrant-v1/results.jsonl
+  /var/lib/coscope/runs/factorial-pilot-qdrant-v1/results.jsonl
 ```
 
 MBPP-Plus predictions are scored in twelve checkpointed EvalPlus jobs after
