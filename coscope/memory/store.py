@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
+import time
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Protocol
 
 from coscope.core.artifact import ArtifactState
 from coscope.core.memory import MemoryEntry
@@ -28,11 +30,59 @@ class SearchHit:
     score: float
 
 
+@dataclass
+class MemoryStoreStats:
+    search_calls: int = 0
+    search_seconds: float = 0.0
+
+
+class MemoryStore(Protocol):
+    """Storage contract used by runtime, retrieval, and context assembly."""
+
+    def add(self, entry: MemoryEntry) -> None: ...
+
+    def replace(self, entry: MemoryEntry) -> None: ...
+
+    def get(self, memory_id: str) -> MemoryEntry | None: ...
+
+    def scopes(self) -> list: ...
+
+    def entries_in_view(
+        self,
+        view: EffectiveView,
+        *,
+        states: frozenset[ArtifactState] | None = None,
+        memory_types: frozenset[str] | None = None,
+    ) -> list[MemoryEntry]: ...
+
+    def search(
+        self,
+        vector: tuple[float, ...],
+        view: EffectiveView,
+        *,
+        top_k: int,
+        memory_types: frozenset[str] | None = None,
+    ) -> list[SearchHit]: ...
+
+    def clear(self) -> None: ...
+
+    @property
+    def stats(self) -> MemoryStoreStats: ...
+
+    def __len__(self) -> int: ...
+
+    @property
+    def revision(self) -> int: ...
+
+    def __iter__(self) -> Iterator[MemoryEntry]: ...
+
+
 class RuntimeMemoryStore:
     def __init__(self) -> None:
         self._entries: dict[str, MemoryEntry] = {}
         self._scope_index: dict[str, set[str]] = defaultdict(set)
         self._revision = 0
+        self._stats = MemoryStoreStats()
 
     def add(self, entry: MemoryEntry) -> None:
         if entry.memory_id in self._entries:
@@ -89,20 +139,33 @@ class RuntimeMemoryStore:
     ) -> list[SearchHit]:
         if top_k <= 0:
             return []
+        started = time.perf_counter()
         hits = [
             SearchHit(entry, cosine_similarity(vector, entry.vector))
             for entry in self.entries_in_view(view, memory_types=memory_types)
             if entry.vector is not None
         ]
         hits.sort(key=lambda hit: (-hit.score, hit.memory.memory_id))
-        return hits[:top_k]
+        result = hits[:top_k]
+        self._stats.search_calls += 1
+        self._stats.search_seconds += time.perf_counter() - started
+        return result
 
     def __len__(self) -> int:
         return len(self._entries)
+
+    def clear(self) -> None:
+        self._entries.clear()
+        self._scope_index.clear()
+        self._revision += 1
 
     @property
     def revision(self) -> int:
         return self._revision
 
-    def __iter__(self) -> Iterable[MemoryEntry]:
+    @property
+    def stats(self) -> MemoryStoreStats:
+        return self._stats
+
+    def __iter__(self) -> Iterator[MemoryEntry]:
         return iter(self._entries.values())

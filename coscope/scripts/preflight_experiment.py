@@ -18,9 +18,12 @@ from coscope.evaluation.benchmark_registry import (
 )
 from coscope.evaluation.benchmarks import BenchmarkExample
 from coscope.evaluation.factorial_experiment import (
+    DEFAULT_BATCH_MODES,
     DEFAULT_FACTORIAL_MODES,
     DEFAULT_SHARING_ARMS,
     FACTORIAL_MODE_SPECS,
+    BatchMode,
+    parse_batch_modes,
     parse_reasoning_modes,
     parse_sharing_arms,
 )
@@ -34,13 +37,13 @@ LLM_CALLS_PER_EXAMPLE = {
     "suite": 3,
     "sharing_ablation": 9,
     "reasoning_modes": 5,
-    "factorial": 45,
+    "factorial": 90,
 }
 TASK_RECORDS_PER_EXAMPLE = {
     "suite": 1,
     "sharing_ablation": 3,
     "reasoning_modes": 2,
-    "factorial": 6,
+    "factorial": 12,
 }
 
 
@@ -51,6 +54,7 @@ def build_preflight_report(
     workflow: str,
     reasoning_modes: tuple[ReasoningMode, ...] = DEFAULT_FACTORIAL_MODES,
     sharing_arms: tuple[SharingArm, ...] = DEFAULT_SHARING_ARMS,
+    batch_modes: tuple[BatchMode, ...] = DEFAULT_BATCH_MODES,
 ) -> dict[str, Any]:
     """Validate loaded examples and summarize the planned experiment."""
     errors: list[str] = []
@@ -119,11 +123,18 @@ def build_preflight_report(
 
     total_examples = sum(len(items) for items in examples_by_benchmark.values())
     if workflow == "factorial":
-        calls_per_example = len(sharing_arms) * len(AGENT_IDS) * sum(
+        calls_per_example = (
+            len(sharing_arms)
+            * len(batch_modes)
+            * len(AGENT_IDS)
+            * sum(
             FACTORIAL_MODE_SPECS[mode].llm_calls_per_agent
             for mode in reasoning_modes
+            )
         )
-        records_per_example = len(reasoning_modes) * len(sharing_arms)
+        records_per_example = (
+            len(reasoning_modes) * len(sharing_arms) * len(batch_modes)
+        )
         evalplus_runs_per_benchmark = records_per_example
     else:
         calls_per_example = LLM_CALLS_PER_EXAMPLE[workflow]
@@ -145,10 +156,16 @@ def build_preflight_report(
             {
                 "reasoning_modes": [mode.value for mode in reasoning_modes],
                 "sharing_policies": [arm.value for arm in sharing_arms],
-                "factorial_conditions": len(reasoning_modes) * len(sharing_arms),
+                "batch_modes": [mode.value for mode in batch_modes],
+                "factorial_conditions": (
+                    len(reasoning_modes)
+                    * len(sharing_arms)
+                    * len(batch_modes)
+                ),
                 "retrieval_requests": (
                     total_examples
                     * len(sharing_arms)
+                    * len(batch_modes)
                     * len(AGENT_IDS)
                     * sum(
                         len(
@@ -168,7 +185,8 @@ def build_preflight_report(
             "official task success (EM/F1, AIME accuracy, MBPP base/plus pass@1)",
             "LLM prompt/completion/reasoning/cached/total tokens",
             "embedding calls and input tokens",
-            "retrieval grouping, savings, Recall@K, MRR@K, fallback",
+            "retrieval grouping, physical vector-store queries and latency, "
+            "Recall@K, MRR@K, fallback",
             "context duplication and unauthorized exposure",
             "retrieval, generation, and end-to-end latency",
         ],
@@ -223,6 +241,7 @@ def main() -> int:
         "--sharing-policies",
         default="coscope,full_sharing,no_sharing",
     )
+    parser.add_argument("--batch-modes", default="batched,independent")
     parser.add_argument("--seed", type=int, default=20260729)
     parser.add_argument(
         "--data-root",
@@ -246,6 +265,7 @@ def main() -> int:
     try:
         reasoning_modes = parse_reasoning_modes(args.reasoning_modes)
         sharing_arms = parse_sharing_arms(args.sharing_policies)
+        batch_modes = parse_batch_modes(args.batch_modes)
         overrides = parse_benchmark_limits(
             args.benchmark_limits,
             allowed=set(requested),
@@ -276,6 +296,7 @@ def main() -> int:
         workflow=args.workflow,
         reasoning_modes=reasoning_modes,
         sharing_arms=sharing_arms,
+        batch_modes=batch_modes,
     )
     report["run_config"] = {
         "full": args.full,

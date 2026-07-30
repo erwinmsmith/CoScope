@@ -19,6 +19,7 @@ from coscope.evaluation.code_benchmark import (
 )
 from coscope.evaluation.factorial_experiment import (
     FACTORIAL_MODE_SPECS,
+    parse_batch_modes,
     parse_reasoning_modes,
     parse_sharing_arms,
     run_factorial_experiment,
@@ -54,6 +55,7 @@ def main() -> int:
         "--sharing-policies",
         default="coscope,full_sharing,no_sharing",
     )
+    parser.add_argument("--batch-modes", default="batched,independent")
     parser.add_argument("--seed", type=int, default=20260729)
     parser.add_argument("--threshold", type=float, default=0.75)
     parser.add_argument("--max-output-tokens", type=int)
@@ -107,6 +109,7 @@ def main() -> int:
     try:
         reasoning_modes = parse_reasoning_modes(args.reasoning_modes)
         sharing_arms = parse_sharing_arms(args.sharing_policies)
+        batch_modes = parse_batch_modes(args.batch_modes)
         limit_overrides = parse_benchmark_limits(
             args.benchmark_limits,
             allowed=set(requested),
@@ -152,6 +155,7 @@ def main() -> int:
         CoScopeSettings.from_env(".env"),
         reasoning_modes=reasoning_modes,
         sharing_arms=sharing_arms,
+        batch_modes=batch_modes,
         threshold=args.threshold,
         max_output_tokens=args.max_output_tokens,
         max_output_tokens_by_benchmark=output_caps,
@@ -163,7 +167,7 @@ def main() -> int:
         ),
     )
     examples_total = sum(len(items) for items in examples.values())
-    calls_per_example = len(sharing_arms) * len(AGENTS) * sum(
+    calls_per_example = len(sharing_arms) * len(batch_modes) * len(AGENTS) * sum(
         FACTORIAL_MODE_SPECS[mode].llm_calls_per_agent
         for mode in reasoning_modes
     )
@@ -175,7 +179,10 @@ def main() -> int:
         "limits_by_benchmark": resolved_limits,
         "reasoning_modes": [mode.value for mode in reasoning_modes],
         "sharing_policies": [arm.value for arm in sharing_arms],
-        "factorial_conditions": len(reasoning_modes) * len(sharing_arms),
+        "batch_modes": [mode.value for mode in batch_modes],
+        "factorial_conditions": (
+            len(reasoning_modes) * len(sharing_arms) * len(batch_modes)
+        ),
         "examples_total": examples_total,
         "planned_llm_calls": examples_total * calls_per_example,
         "max_output_tokens": args.max_output_tokens,
@@ -183,7 +190,7 @@ def main() -> int:
         "evalplus_image": (
             args.evalplus_image if "mbpp_plus" in requested else None
         ),
-        "purpose": "uniform_reasoning_x_sharing_factorial",
+        "purpose": "reasoning_x_sharing_x_batch_factorial",
     }
 
     output = Path(args.output)
@@ -199,8 +206,8 @@ def main() -> int:
                 "run_config": report["run_config"],
                 "overall": report["overall"],
                 "comparisons_by_mode": report["comparisons_by_mode"],
-                "mode_comparisons_by_sharing_policy": report[
-                    "mode_comparisons_by_sharing_policy"
+                "mode_comparisons_by_condition": report[
+                    "mode_comparisons_by_condition"
                 ],
             },
             ensure_ascii=False,

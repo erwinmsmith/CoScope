@@ -7,6 +7,8 @@ import os
 
 from coscope import CoScopeRuntime
 from coscope.config import CoScopeSettings
+from coscope.core import MemoryEntry
+from coscope.scope import ScopeDescriptor, Visibility
 
 
 def main() -> int:
@@ -28,10 +30,31 @@ def main() -> int:
     output = runtime.llm.invoke(
         [{"role": "user", "content": "Reply with exactly: OK"}]
     )
+    scope = ScopeDescriptor(
+        frozenset({"provider_check"}),
+        "provider_check",
+        Visibility.SYSTEM,
+    )
+    entry = runtime.ingest_memory(
+        MemoryEntry(
+            "CoScope vector store check",
+            scope,
+            "provider_check",
+            "provider_check",
+        )
+    )
+    loaded = runtime.memory.get(entry.memory_id)
+    if loaded is None or loaded.content != entry.content:
+        raise RuntimeError("memory provider failed a write/read round trip")
     print(
         f"Embedding: {runtime.embedder.model_version} ({len(vector)} dimensions)"
     )
     print(f"LLM: {runtime.llm.model_version} ({output.text.strip()})")
+    print(
+        f"Memory: {settings.memory.provider} "
+        f"({settings.memory.qdrant_collection})"
+    )
+    runtime.close(purge_memory=True)
     return 0
 
 

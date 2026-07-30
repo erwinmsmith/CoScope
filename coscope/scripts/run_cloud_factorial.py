@@ -40,8 +40,10 @@ from coscope.evaluation.code_benchmark import (
 )
 from coscope.evaluation.factorial_experiment import (
     DEFAULT_SHARING_ARMS,
+    BatchMode,
     _factorial_aggregate,
     _mode_comparisons,
+    parse_batch_modes,
     parse_reasoning_modes,
     parse_sharing_arms,
     run_factorial_task,
@@ -50,6 +52,7 @@ from coscope.evaluation.sharing_ablation import (
     SharingArm,
     _comparisons,
 )
+from coscope.memory import build_qdrant_store
 from coscope.reasoning import ReasoningMode
 
 
@@ -88,6 +91,7 @@ def main() -> int:
     try:
         modes = parse_reasoning_modes(args.reasoning_modes)
         policies = parse_sharing_arms(args.sharing_policies)
+        batch_modes = parse_batch_modes(args.batch_modes)
         overrides = parse_benchmark_limits(
             args.benchmark_limits,
             allowed=set(requested),
@@ -126,11 +130,13 @@ def main() -> int:
             example.example_id,
             mode.value,
             policy.value,
+            batch_mode.value,
         )
         for benchmark, items in examples.items()
         for example in items
         for mode in modes
         for policy in policies
+        for batch_mode in batch_modes
     ]
     output_caps = _output_caps(args)
     settings = CoScopeSettings.from_env(args.env_file)
@@ -139,20 +145,32 @@ def main() -> int:
     settings.llm.validate()
     settings.embedding.validate()
     settings.retrieval.validate()
-    embedding_model_version = build_embedding(
-        settings.embedding
-    ).model_version
+    settings.memory.validate()
+    if settings.memory.provider != "qdrant":
+        parser.error(
+            "cloud factorial runs require "
+            "COSCOPE_MEMORY_PROVIDER=qdrant"
+        )
+    embedding = build_embedding(settings.embedding)
+    embedding_model_version = embedding.model_version
+    qdrant_probe = build_qdrant_store(
+        settings.memory,
+        dimension=settings.embedding.dimension,
+        namespace=f"preflight_{uuid.uuid4().hex}",
+    )
+    qdrant_probe.clear()
     state_dir = Path(args.state_dir).expanduser().resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     config = {
-        "schema_version": 1,
-        "purpose": "uniform_reasoning_x_sharing_factorial",
+        "schema_version": 2,
+        "purpose": "reasoning_x_sharing_x_batch_factorial",
         "code_revision": code_revision,
         "benchmarks": requested,
         "limits_by_benchmark": limits,
         "dataset_digest": _dataset_digest(examples),
         "reasoning_modes": [mode.value for mode in modes],
         "sharing_policies": [policy.value for policy in policies],
+        "batch_modes": [batch_mode.value for batch_mode in batch_modes],
         "seed": args.seed,
         "threshold": args.threshold,
         "max_output_tokens": args.max_output_tokens,
@@ -169,6 +187,8 @@ def main() -> int:
         "embedding_result_cache_size": (
             settings.embedding.result_cache_size
         ),
+        "memory_provider": settings.memory.provider,
+        "qdrant_collection": settings.memory.qdrant_collection,
         "bootstrap_samples": args.bootstrap_samples,
         "purge_details_after_success": args.purge_details_after_success,
         "canonical_latency_metric": (
@@ -349,6 +369,7 @@ def main() -> int:
                 config,
                 modes,
                 policies,
+                batch_modes,
                 bootstrap_samples=args.bootstrap_samples,
             )
             _write_json_atomic(
@@ -414,6 +435,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sharing-policies",
         default="coscope,full_sharing,no_sharing",
+    )
+    parser.add_argument(
+        "--batch-modes",
+        default="batched,independent",
     )
     parser.add_argument("--seed", type=int, default=20260729)
     parser.add_argument("--threshold", type=float, default=0.75)
@@ -522,6 +547,7 @@ def _execute_task(
         settings,
         ReasoningMode(task.reasoning_mode),
         SharingArm(task.sharing_policy),
+        BatchMode(task.batch_mode),
         threshold=threshold,
         max_output_tokens=cap,
     )
@@ -568,6 +594,7 @@ def _run_evalplus_jobs(
                         benchmark="mbpp_plus",
                         reasoning_mode=job.reasoning_mode,
                         sharing_policy=job.sharing_policy,
+                        batch_mode=job.batch_mode,
                     )
                 }
                 future = executor.submit(
@@ -677,6 +704,7 @@ def _build_final_metrics(
     config: dict[str, Any],
     modes: tuple[ReasoningMode, ...],
     policies: tuple[SharingArm, ...],
+    batch_modes: tuple[BatchMode, ...],
     *,
     bootstrap_samples: int,
 ) -> dict[str, Any]:
@@ -684,44 +712,67 @@ def _build_final_metrics(
     for benchmark in config["benchmarks"]:
         benchmark_reports[benchmark] = {
             mode.value: {
-                policy.value: _factorial_aggregate(
-                    list(
-                        checkpoint.iter_metric_records(
-                            benchmark=benchmark,
-                            reasoning_mode=mode.value,
-                            sharing_policy=policy.value,
+                policy.value: {
+                    batch_mode.value: _factorial_aggregate(
+                        list(
+                            checkpoint.iter_metric_records(
+                                benchmark=benchmark,
+                                reasoning_mode=mode.value,
+                                sharing_policy=policy.value,
+                                batch_mode=batch_mode.value,
+                            )
                         )
                     )
-                )
+                    for batch_mode in batch_modes
+                }
                 for policy in policies
             }
             for mode in modes
         }
 
-    overall: dict[str, dict[str, dict[str, Any]]] = {}
+    overall: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
     comparisons_by_mode: dict[str, Any] = {}
     for mode in modes:
-        records_by_policy = {
-            policy: list(
-                checkpoint.iter_metric_records(
-                    reasoning_mode=mode.value,
-                    sharing_policy=policy.value,
-                )
-            )
-            for policy in policies
-        }
         overall[mode.value] = {
-            policy.value: _factorial_aggregate(
-                records_by_policy[policy]
-            )
+            policy.value: {
+                batch_mode.value: _factorial_aggregate(
+                    list(
+                        checkpoint.iter_metric_records(
+                            reasoning_mode=mode.value,
+                            sharing_policy=policy.value,
+                            batch_mode=batch_mode.value,
+                        )
+                    )
+                )
+                for batch_mode in batch_modes
+            }
             for policy in policies
         }
         if set(policies) == set(DEFAULT_SHARING_ARMS):
-            comparisons_by_mode[mode.value] = _comparisons(
-                records_by_policy,
-                overall[mode.value],
-                bootstrap_samples=bootstrap_samples,
-            )
+            comparisons_by_mode[mode.value] = {}
+            for batch_mode in batch_modes:
+                records_by_policy = {
+                    policy: list(
+                        checkpoint.iter_metric_records(
+                            reasoning_mode=mode.value,
+                            sharing_policy=policy.value,
+                            batch_mode=batch_mode.value,
+                        )
+                    )
+                    for policy in policies
+                }
+                comparisons_by_mode[mode.value][batch_mode.value] = (
+                    _comparisons(
+                        records_by_policy,
+                        {
+                            policy.value: overall[mode.value][
+                                policy.value
+                            ][batch_mode.value]
+                            for policy in policies
+                        },
+                        bootstrap_samples=bootstrap_samples,
+                    )
+                )
 
     return {
         "status": "completed",
@@ -741,6 +792,7 @@ def _build_final_metrics(
             "factorial": True,
             "reasoning_modes": config["reasoning_modes"],
             "sharing_policies": config["sharing_policies"],
+            "batch_modes": config["batch_modes"],
             "uniform_mode_across_agents": True,
             "intermediate_details_purged": config[
                 "purge_details_after_success"
@@ -753,10 +805,11 @@ def _build_final_metrics(
         "benchmarks": benchmark_reports,
         "overall": overall,
         "comparisons_by_mode": comparisons_by_mode,
-        "mode_comparisons_by_sharing_policy": _mode_comparisons(
+        "mode_comparisons_by_condition": _mode_comparisons(
             overall,
             modes,
             policies,
+            batch_modes,
         ),
     }
 
@@ -803,6 +856,7 @@ def _task_event(event: str, task: ClaimedTask) -> dict[str, Any]:
         "example_id": task.example_id,
         "reasoning_mode": task.reasoning_mode,
         "sharing_policy": task.sharing_policy,
+        "batch_mode": task.batch_mode,
         "attempt": task.attempt,
     }
 
@@ -816,6 +870,10 @@ def _compact_metrics(result: dict[str, Any]) -> dict[str, Any]:
         .get("llm", {})
         .get("total_tokens", 0),
         "provider_tokens": result["provider_usage"]["all"]["total_tokens"],
+        "store_queries": result["retrieval"]["store_queries"],
+        "query_reduction_rate": result["retrieval"][
+            "query_reduction_rate"
+        ],
         "end_to_end_seconds": result["latency"]["end_to_end_seconds"],
     }
 
@@ -863,7 +921,11 @@ def _redact_error(
     value = "".join(
         traceback.format_exception_only(type(error), error)
     ).strip()
-    for secret in (settings.llm.api_key, settings.embedding.api_key):
+    for secret in (
+        settings.llm.api_key,
+        settings.embedding.api_key,
+        settings.memory.qdrant_api_key,
+    ):
         if secret:
             value = value.replace(secret, "[REDACTED]")
     return value[:4_000]

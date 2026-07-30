@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from coscope.adapters.embedding import EmbeddingAdapter
-from coscope.memory.store import RuntimeMemoryStore
+from coscope.memory.store import MemoryStore
 from coscope.retrieval.cache import SharedRetrievalCache
 from coscope.retrieval.fallback import PrivateFallback
 from coscope.retrieval.grouping import RequestGrouper
@@ -26,12 +26,13 @@ class RetrievalStats:
     private_store_queries: int = 0
     fallback_triggers: int = 0
     shared_cache_hits: int = 0
+    vector_store_seconds: float = 0.0
 
 
 class RetrievalCoordinator:
     def __init__(
         self,
-        store: RuntimeMemoryStore,
+        store: MemoryStore,
         embedder: EmbeddingAdapter,
         *,
         grouper: RequestGrouper | None = None,
@@ -48,9 +49,13 @@ class RetrievalCoordinator:
         self.stats = RetrievalStats()
 
     def retrieve_batch(
-        self, requests: list[RetrievalRequest]
+        self,
+        requests: list[RetrievalRequest],
+        *,
+        use_shared_cache: bool = True,
     ) -> dict[str, RetrievalResult]:
         self.stats = RetrievalStats(requests=len(requests))
+        search_seconds_before = self.store.stats.search_seconds
         self._validate(requests)
         groups = self.grouper.group(requests)
         self.stats.groups = len(groups)
@@ -69,10 +74,11 @@ class RetrievalCoordinator:
                         "candidate_k": self.shared_retriever.candidate_k
                     },
                 )
-                cached = self.cache.get(cache_key)
+                cached = self.cache.get(cache_key) if use_shared_cache else None
                 if cached is None:
                     shared = self.shared_retriever.retrieve(group)
-                    self.cache.put(cache_key, shared)
+                    if use_shared_cache:
+                        self.cache.put(cache_key, shared)
                     self.stats.shared_store_queries += 1
                 else:
                     shared = cached
@@ -108,6 +114,32 @@ class RetrievalCoordinator:
                         "minimum_group_similarity": group.similarity_stats["minimum"],
                     },
                 )
+        self.stats.vector_store_seconds = (
+            self.store.stats.search_seconds - search_seconds_before
+        )
+        return results
+
+    def retrieve_independently(
+        self,
+        requests: list[RetrievalRequest],
+    ) -> dict[str, RetrievalResult]:
+        """Run one uncached store retrieval per request without grouping."""
+        combined = RetrievalStats(requests=len(requests))
+        results: dict[str, RetrievalResult] = {}
+        for request in requests:
+            result = self.retrieve_batch(
+                [request],
+                use_shared_cache=False,
+            )
+            partial = self.stats
+            combined.groups += partial.groups
+            combined.shared_store_queries += partial.shared_store_queries
+            combined.private_store_queries += partial.private_store_queries
+            combined.fallback_triggers += partial.fallback_triggers
+            combined.shared_cache_hits += partial.shared_cache_hits
+            combined.vector_store_seconds += partial.vector_store_seconds
+            results.update(result)
+        self.stats = combined
         return results
 
     @staticmethod

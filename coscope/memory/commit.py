@@ -5,12 +5,12 @@ from __future__ import annotations
 from coscope.adapters.embedding import EmbeddingAdapter
 from coscope.core.artifact import Artifact
 from coscope.core.memory import MemoryEntry
-from coscope.memory.store import RuntimeMemoryStore
+from coscope.memory.store import MemoryStore
 from coscope.scope.descriptor import ScopeDescriptor
 
 
 class CommitService:
-    def __init__(self, store: RuntimeMemoryStore, embedder: EmbeddingAdapter):
+    def __init__(self, store: MemoryStore, embedder: EmbeddingAdapter):
         self.store = store
         self.embedder = embedder
 

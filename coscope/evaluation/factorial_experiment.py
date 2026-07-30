@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, replace
+from enum import Enum
 from statistics import mean
 from typing import Any, cast
 
@@ -84,6 +85,14 @@ DEFAULT_FACTORIAL_MODES = tuple(
 )
 DEFAULT_SHARING_ARMS = tuple(SharingArm)
 
+
+class BatchMode(str, Enum):
+    BATCHED = "batched"
+    INDEPENDENT = "independent"
+
+
+DEFAULT_BATCH_MODES = tuple(BatchMode)
+
 ROLE_OBJECTIVES = {
     "planner": "identify the evidence requirements and construct a solution plan",
     "solver": "derive the exact final answer from authorized evidence",
@@ -119,12 +128,28 @@ def parse_sharing_arms(value: str) -> tuple[SharingArm, ...]:
     return arms
 
 
+def parse_batch_modes(value: str) -> tuple[BatchMode, ...]:
+    names = [item.strip().casefold() for item in value.split(",") if item.strip()]
+    if not names:
+        raise ValueError("at least one batch mode is required")
+    try:
+        modes = tuple(BatchMode(name) for name in names)
+    except ValueError as error:
+        raise ValueError(
+            "batch modes must be selected from batched, independent"
+        ) from error
+    if len(modes) != len(set(modes)):
+        raise ValueError("batch modes cannot contain duplicates")
+    return modes
+
+
 def run_factorial_experiment(
     examples_by_benchmark: dict[str, list[BenchmarkExample]],
     base_settings: CoScopeSettings,
     *,
     reasoning_modes: tuple[ReasoningMode, ...] = DEFAULT_FACTORIAL_MODES,
     sharing_arms: tuple[SharingArm, ...] = DEFAULT_SHARING_ARMS,
+    batch_modes: tuple[BatchMode, ...] = DEFAULT_BATCH_MODES,
     threshold: float = 0.75,
     max_output_tokens: int | None = None,
     max_output_tokens_by_benchmark: dict[str, int | None] | None = None,
@@ -132,13 +157,17 @@ def run_factorial_experiment(
     code_evaluator: CodeEvaluator | None = None,
     progress: Any | None = None,
 ) -> dict[str, Any]:
-    """Run identical examples under each uniform mode and sharing policy."""
-    if not reasoning_modes or not sharing_arms:
-        raise ValueError("reasoning modes and sharing arms cannot be empty")
+    """Run identical examples under each mode, sharing, and batching condition."""
+    if not reasoning_modes or not sharing_arms or not batch_modes:
+        raise ValueError(
+            "reasoning modes, sharing arms, and batch modes cannot be empty"
+        )
     if len(reasoning_modes) != len(set(reasoning_modes)):
         raise ValueError("reasoning modes cannot contain duplicates")
     if len(sharing_arms) != len(set(sharing_arms)):
         raise ValueError("sharing arms cannot contain duplicates")
+    if len(batch_modes) != len(set(batch_modes)):
+        raise ValueError("batch modes cannot contain duplicates")
     settings = replace(
         base_settings,
         retrieval=replace(
@@ -160,9 +189,12 @@ def run_factorial_experiment(
     reports: dict[str, dict[str, Any]] = {}
     all_tasks: dict[
         ReasoningMode,
-        dict[SharingArm, list[dict[str, Any]]],
+        dict[SharingArm, dict[BatchMode, list[dict[str, Any]]]],
     ] = {
-        mode: {arm: [] for arm in sharing_arms}
+        mode: {
+            arm: {batch: [] for batch in batch_modes}
+            for arm in sharing_arms
+        }
         for mode in reasoning_modes
     }
     for benchmark, examples in examples_by_benchmark.items():
@@ -172,39 +204,49 @@ def run_factorial_experiment(
         )
         condition_tasks: dict[
             ReasoningMode,
-            dict[SharingArm, list[dict[str, Any]]],
+            dict[SharingArm, dict[BatchMode, list[dict[str, Any]]]],
         ] = {
-            mode: {arm: [] for arm in sharing_arms}
+            mode: {
+                arm: {batch: [] for batch in batch_modes}
+                for arm in sharing_arms
+            }
             for mode in reasoning_modes
         }
         for example in examples:
             for mode in reasoning_modes:
                 for arm in sharing_arms:
-                    task = _run_factorial_task(
-                        example,
-                        benchmark_settings,
-                        mode,
-                        arm,
-                    )
-                    condition_tasks[mode][arm].append(task)
-                    all_tasks[mode][arm].append(task)
-                    if progress is not None:
-                        progress(
-                            {
-                                "benchmark": benchmark,
-                                "example_id": example.example_id,
-                                "reasoning_mode": mode.value,
-                                "sharing_policy": arm.value,
-                                "answer_f1": task["scores"]["f1"],
-                                "retrieval_requests": task["retrieval"]["requests"],
-                                "retrieval_groups": task["retrieval"]["groups"],
-                                "store_queries": task["retrieval"]["store_queries"],
-                                "pollution_rate": task["context"]["pollution_rate"],
-                                "end_to_end_seconds": task["latency"][
-                                    "end_to_end_seconds"
-                                ],
-                            }
+                    for batch in batch_modes:
+                        task = _run_factorial_task(
+                            example,
+                            benchmark_settings,
+                            mode,
+                            arm,
+                            batch,
                         )
+                        condition_tasks[mode][arm][batch].append(task)
+                        all_tasks[mode][arm][batch].append(task)
+                        if progress is not None:
+                            progress(
+                                {
+                                    "benchmark": benchmark,
+                                    "example_id": example.example_id,
+                                    "reasoning_mode": mode.value,
+                                    "sharing_policy": arm.value,
+                                    "batch_mode": batch.value,
+                                    "answer_f1": task["scores"]["f1"],
+                                    "retrieval_requests": task["retrieval"][
+                                        "requests"
+                                    ],
+                                    "retrieval_groups": task["retrieval"]["groups"],
+                                    "store_queries": task["retrieval"]["store_queries"],
+                                    "pollution_rate": task["context"][
+                                        "pollution_rate"
+                                    ],
+                                    "end_to_end_seconds": task["latency"][
+                                        "end_to_end_seconds"
+                                    ],
+                                }
+                            )
         if benchmark == "mbpp_plus":
             if code_evaluator is None:
                 raise ValueError(
@@ -212,21 +254,26 @@ def run_factorial_experiment(
                 )
             for mode in reasoning_modes:
                 for arm in sharing_arms:
-                    apply_mbpp_plus_scores(
-                        condition_tasks[mode][arm],
-                        examples,
-                        code_evaluator,
-                        label=(
-                            f"factorial_mbpp_plus_{mode.value}_{arm.value}"
-                        ),
-                    )
+                    for batch in batch_modes:
+                        apply_mbpp_plus_scores(
+                            condition_tasks[mode][arm][batch],
+                            examples,
+                            code_evaluator,
+                            label=(
+                                "factorial_mbpp_plus_"
+                                f"{mode.value}_{arm.value}_{batch.value}"
+                            ),
+                        )
         reports[benchmark] = {
             mode.value: {
                 arm.value: {
-                    "aggregate": _factorial_aggregate(
-                        condition_tasks[mode][arm]
-                    ),
-                    "tasks": condition_tasks[mode][arm],
+                    batch.value: {
+                        "aggregate": _factorial_aggregate(
+                            condition_tasks[mode][arm][batch]
+                        ),
+                        "tasks": condition_tasks[mode][arm][batch],
+                    }
+                    for batch in batch_modes
                 }
                 for arm in sharing_arms
             }
@@ -235,17 +282,31 @@ def run_factorial_experiment(
 
     overall = {
         mode.value: {
-            arm.value: _factorial_aggregate(all_tasks[mode][arm])
+            arm.value: {
+                batch.value: _factorial_aggregate(
+                    all_tasks[mode][arm][batch]
+                )
+                for batch in batch_modes
+            }
             for arm in sharing_arms
         }
         for mode in reasoning_modes
     }
     comparisons_by_mode = {
-        mode.value: _comparisons(
-            cast(dict[SharingArm, list[dict[str, Any]]], all_tasks[mode]),
-            overall[mode.value],
-            bootstrap_samples=bootstrap_samples,
-        )
+        mode.value: {
+            batch.value: _comparisons(
+                {
+                    arm: all_tasks[mode][arm][batch]
+                    for arm in sharing_arms
+                },
+                {
+                    arm.value: overall[mode.value][arm.value][batch.value]
+                    for arm in sharing_arms
+                },
+                bootstrap_samples=bootstrap_samples,
+            )
+            for batch in batch_modes
+        }
         for mode in reasoning_modes
         if set(sharing_arms) == set(DEFAULT_SHARING_ARMS)
     }
@@ -262,6 +323,7 @@ def run_factorial_experiment(
             "uniform_mode_across_agents": True,
             "reasoning_modes": [mode.value for mode in reasoning_modes],
             "sharing_policies": [arm.value for arm in sharing_arms],
+            "batch_modes": [batch.value for batch in batch_modes],
             "agent_topology": "planner -> solver -> verifier",
             "agent_count": len(AGENTS),
             "mode_specs": {
@@ -278,18 +340,24 @@ def run_factorial_experiment(
             "got_extension_available": ReasoningMode.GOT in FACTORIAL_MODE_SPECS,
             "gold_available_to_runtime": False,
             "final_answer_rule": "verifier output for every factorial condition",
-            "retrieval_batch_rule": (
-                "all pending agent/node/branch requests in one scope-safe batch; "
-                "shared recall, independent authorization/rerank/fallback/context"
-            ),
+            "retrieval_execution_rule": {
+                BatchMode.BATCHED.value: (
+                    "scope-safe grouping and one shared vector-store query per "
+                    "compatible group"
+                ),
+                BatchMode.INDEPENDENT.value: (
+                    "one uncached vector-store query per agent/node/branch request"
+                ),
+            },
         },
         "benchmarks": reports,
         "overall": overall,
         "comparisons_by_mode": comparisons_by_mode,
-        "mode_comparisons_by_sharing_policy": _mode_comparisons(
+        "mode_comparisons_by_condition": _mode_comparisons(
             overall,
             reasoning_modes,
             sharing_arms,
+            batch_modes,
         ),
     }
 
@@ -299,6 +367,7 @@ def run_factorial_task(
     base_settings: CoScopeSettings,
     mode: ReasoningMode,
     arm: SharingArm,
+    batch_mode: BatchMode,
     *,
     threshold: float = 0.75,
     max_output_tokens: int | None = None,
@@ -317,7 +386,13 @@ def run_factorial_task(
             minimum_pairwise_similarity=threshold,
         ),
     )
-    return _run_factorial_task(example, settings, mode, arm)
+    return _run_factorial_task(
+        example,
+        settings,
+        mode,
+        arm,
+        batch_mode,
+    )
 
 
 def _run_factorial_task(
@@ -325,13 +400,44 @@ def _run_factorial_task(
     settings: CoScopeSettings,
     mode: ReasoningMode,
     arm: SharingArm,
+    batch_mode: BatchMode,
 ) -> dict[str, Any]:
-    runtime = CoScopeRuntime.from_settings(settings)
+    run_id = (
+        f"factorial_{example.benchmark}_{mode.value}_{arm.value}_"
+        f"{batch_mode.value}_"
+        f"{example.example_id}"
+    )
+    runtime = CoScopeRuntime.from_settings(
+        settings,
+        memory_namespace=run_id,
+    )
+    try:
+        return _execute_factorial_task(
+            example,
+            settings,
+            mode,
+            arm,
+            batch_mode,
+            runtime,
+            run_id,
+        )
+    finally:
+        runtime.close(purge_memory=True)
+
+
+def _execute_factorial_task(
+    example: BenchmarkExample,
+    settings: CoScopeSettings,
+    mode: ReasoningMode,
+    arm: SharingArm,
+    batch_mode: BatchMode,
+    runtime: CoScopeRuntime,
+    run_id: str,
+) -> dict[str, Any]:
     # Model download, checksum, and ONNX session initialization are startup
     # costs, not task latency. The cloud runner warms the shared backend before
     # any checkpoint task is claimed.
     started = time.perf_counter()
-    run_id = f"factorial_{mode.value}_{arm.value}_{example.example_id}"
     runtime.create_run(example.benchmark, run_id=run_id)
 
     reasoning_by_agent: dict[str, Any] = {}
@@ -365,7 +471,11 @@ def _run_factorial_task(
     )
     retrieval_embedding_before = runtime.usage.duration_seconds("embedding")
     retrieval_started = time.perf_counter()
-    results = runtime.retrieve_batch(requests)
+    results = (
+        runtime.retrieve_batch(requests)
+        if batch_mode == BatchMode.BATCHED
+        else runtime.retrieve_independently(requests)
+    )
     retrieval_wall_clock_seconds = time.perf_counter() - retrieval_started
     retrieval_embedding_seconds = (
         runtime.usage.duration_seconds("embedding")
@@ -509,6 +619,7 @@ def _run_factorial_task(
         "example_id": example.example_id,
         "reasoning_mode": mode.value,
         "arm": arm.value,
+        "batch_mode": batch_mode.value,
         "prediction": prediction,
         "reference": _reference(example),
         "scores": scores,
@@ -545,19 +656,17 @@ def _run_factorial_task(
             "shared_store_queries": runtime.retrieval.stats.shared_store_queries,
             "private_store_queries": runtime.retrieval.stats.private_store_queries,
             "store_queries": store_queries,
-            "query_savings": (
-                1.0
-                - runtime.retrieval.stats.shared_store_queries / len(requests)
-                if runtime.retrieval.stats.shared_store_queries
-                else 0.0
-            ),
+            "batch_mode": batch_mode.value,
+            "query_reduction_rate": 1.0 - store_queries / len(requests),
+            "query_savings": 1.0 - store_queries / len(requests),
             "shared_recall_savings": (
-                1.0
-                - runtime.retrieval.stats.shared_store_queries / len(requests)
-                if runtime.retrieval.stats.shared_store_queries
-                else 0.0
+                1.0 - store_queries / len(requests)
             ),
             "fallback_triggers": runtime.retrieval.stats.fallback_triggers,
+            "memory_store_backend": settings.memory.provider,
+            "vector_store_query_seconds": (
+                runtime.retrieval.stats.vector_store_seconds
+            ),
             "recall_at_10": recall_at_k(results, gold_by_request, k=10),
             "mrr_at_10": mrr_at_k(results, gold_by_request, k=10),
             "latency_seconds": retrieval_seconds,
@@ -690,8 +799,9 @@ def _make_factorial_requests(
                         f"Reasoning operation: {operation}"
                     ),
                     public_intent=(
-                        f"{example.question} find public evidence needed to "
-                        "plan solve and verify"
+                        f"{example.question}\nPublic role objective: "
+                        f"{ROLE_OBJECTIVES[agent_id]}\n"
+                        f"Public reasoning operation: {operation}"
                     ),
                     context_budget=8_000,
                     retrieval_budget=10,
@@ -732,33 +842,45 @@ def _reference(example: BenchmarkExample) -> str:
 
 
 def _mode_comparisons(
-    overall: dict[str, dict[str, dict[str, Any]]],
+    overall: dict[str, dict[str, dict[str, dict[str, Any]]]],
     modes: tuple[ReasoningMode, ...],
     arms: tuple[SharingArm, ...],
+    batch_modes: tuple[BatchMode, ...],
 ) -> dict[str, Any]:
     if ReasoningMode.COT not in modes or ReasoningMode.TOT not in modes:
         return {}
     report = {}
     for arm in arms:
-        cot = overall[ReasoningMode.COT.value][arm.value]
-        tot = overall[ReasoningMode.TOT.value][arm.value]
         report[arm.value] = {
-            "tot_minus_cot_answer_f1": tot["answer_f1"] - cot["answer_f1"],
-            "tot_minus_cot_task_success": (
-                tot["task_success_rate"] - cot["task_success_rate"]
-            ),
-            "tot_to_cot_llm_token_ratio": (
-                tot["llm_total_tokens"] / cot["llm_total_tokens"]
-                if cot["llm_total_tokens"]
-                else 0.0
-            ),
-            "tot_to_cot_latency_ratio": (
-                tot["mean_end_to_end_seconds"] / cot["mean_end_to_end_seconds"]
-                if cot["mean_end_to_end_seconds"]
-                else 0.0
-            ),
+            batch.value: _one_mode_comparison(
+                overall[ReasoningMode.COT.value][arm.value][batch.value],
+                overall[ReasoningMode.TOT.value][arm.value][batch.value],
+            )
+            for batch in batch_modes
         }
     return report
+
+
+def _one_mode_comparison(
+    cot: dict[str, Any],
+    tot: dict[str, Any],
+) -> dict[str, float]:
+    return {
+        "tot_minus_cot_answer_f1": tot["answer_f1"] - cot["answer_f1"],
+        "tot_minus_cot_task_success": (
+            tot["task_success_rate"] - cot["task_success_rate"]
+        ),
+        "tot_to_cot_llm_token_ratio": (
+            tot["llm_total_tokens"] / cot["llm_total_tokens"]
+            if cot["llm_total_tokens"]
+            else 0.0
+        ),
+        "tot_to_cot_latency_ratio": (
+            tot["mean_end_to_end_seconds"] / cot["mean_end_to_end_seconds"]
+            if cot["mean_end_to_end_seconds"]
+            else 0.0
+        ),
+    }
 
 
 def _factorial_aggregate(tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -770,6 +892,30 @@ def _factorial_aggregate(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             ),
             "mean_retrieval_requests": mean(
                 int(task["retrieval"]["requests"]) for task in tasks
+            ),
+            "store_queries": sum(
+                int(task["retrieval"]["store_queries"]) for task in tasks
+            ),
+            "mean_store_queries": mean(
+                int(task["retrieval"]["store_queries"]) for task in tasks
+            ),
+            "mean_query_reduction_rate": mean(
+                float(
+                    task["retrieval"].get(
+                        "query_reduction_rate",
+                        task["retrieval"].get("shared_recall_savings", 0.0),
+                    )
+                )
+                for task in tasks
+            ),
+            "mean_vector_store_query_seconds": mean(
+                float(
+                    task["retrieval"].get(
+                        "vector_store_query_seconds",
+                        0.0,
+                    )
+                )
+                for task in tasks
             ),
             "mean_shared_recall_savings": mean(
                 float(task["retrieval"]["shared_recall_savings"])

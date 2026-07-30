@@ -52,11 +52,12 @@ instead always scores the verifier output so the no-sharing control cannot
 gain information through an external vote.
 
 The canonical factorial evaluation keeps this topology fixed and independently
-varies a uniform reasoning mode and sharing policy. All three agents use CoT
-in the CoT conditions. All three use ToT in the ToT conditions; their nine
-branch requests enter one `retrieve_batch` call before branch generation.
-GoT remains registered as a compatible future mode but is not enabled in the
-default matrix.
+varies a uniform reasoning mode, sharing policy, and retrieval execution mode.
+All three agents use CoT in the CoT conditions. All three use ToT in the ToT
+conditions. Batched conditions submit the nine ToT branch requests to one
+scope-safe grouping pass; independent conditions issue nine uncached
+vector-store searches. GoT remains registered as a compatible future mode but
+is not enabled in the default matrix.
 
 ## Scope-first retrieval
 
@@ -68,7 +69,9 @@ default matrix.
    memory types, embedding version, and retrieval parameters.
 5. `RequestGrouper` uses medoid similarity plus a complete-link pairwise floor;
    it does not use transitive connected components.
-6. Shared retrieval searches only the intersection of public views.
+6. Shared retrieval searches only the intersection of public views. Formal
+   experiments apply this intersection as a Qdrant payload filter before
+   vector ranking.
 7. Every agent independently rechecks authorization, reranks, performs local
    fallback over `effective_view - shared_view`, and assembles context.
 

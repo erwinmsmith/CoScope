@@ -1,12 +1,12 @@
 """Shared first-stage retrieval over the safe view intersection."""
 
-from coscope.memory.store import RuntimeMemoryStore
+from coscope.memory.store import MemoryStore
 from coscope.retrieval.grouping import RetrievalGroup
 from coscope.retrieval.request import RetrievalCandidate
 
 
 class SharedRetriever:
-    def __init__(self, store: RuntimeMemoryStore, candidate_k: int = 50):
+    def __init__(self, store: MemoryStore, candidate_k: int = 50):
         self.store = store
         self.candidate_k = candidate_k
 

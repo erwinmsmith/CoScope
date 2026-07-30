@@ -23,7 +23,13 @@ from coscope.core import (
     RuntimeEvent,
     UsageLedger,
 )
-from coscope.memory import CommitService, PromotionService, RuntimeMemoryStore
+from coscope.memory import (
+    CommitService,
+    MemoryStore,
+    PromotionService,
+    RuntimeMemoryStore,
+    build_qdrant_store,
+)
 from coscope.reasoning import (
     CoTRuntime,
     GoTRuntime,
@@ -65,6 +71,7 @@ class CoScopeRuntime:
         *,
         settings: CoScopeSettings | None = None,
         usage_ledger: UsageLedger | None = None,
+        memory_store: MemoryStore | None = None,
     ):
         self.usage = usage_ledger or UsageLedger()
         self.embedder = embedder or DeterministicEmbedding()
@@ -73,7 +80,11 @@ class CoScopeRuntime:
         self.topology = AgentTopology()
         self.policy = PolicyEngine()
         self.scope_engine = ScopeEngine(self.policy)
-        self.memory = RuntimeMemoryStore()
+        self.memory = (
+            memory_store
+            if memory_store is not None
+            else RuntimeMemoryStore()
+        )
         retrieval_settings = settings.retrieval if settings else None
         self.retrieval = RetrievalCoordinator(
             self.memory,
@@ -109,17 +120,46 @@ class CoScopeRuntime:
         return cls.from_settings(settings)
 
     @classmethod
-    def from_settings(cls, settings: CoScopeSettings) -> CoScopeRuntime:
+    def from_settings(
+        cls,
+        settings: CoScopeSettings,
+        *,
+        memory_namespace: str | None = None,
+    ) -> CoScopeRuntime:
         """Create a runtime from already validated settings."""
-        if not settings.live:
-            return cls(settings=settings)
         usage = UsageLedger()
+        embedder: EmbeddingAdapter = (
+            build_embedding(settings.embedding, usage)
+            if settings.live
+            else DeterministicEmbedding(
+                settings.embedding.dimension
+                if settings.memory.provider == "qdrant"
+                else 128
+            )
+        )
+        memory_store = (
+            build_qdrant_store(
+                settings.memory,
+                dimension=int(
+                    getattr(embedder, "dimension", settings.embedding.dimension)
+                ),
+                namespace=memory_namespace,
+            )
+            if settings.memory.provider == "qdrant"
+            else RuntimeMemoryStore()
+        )
         return cls(
-            embedder=build_embedding(settings.embedding, usage),
-            llm=build_llm(settings.llm, usage),
+            embedder=embedder,
+            llm=build_llm(settings.llm, usage) if settings.live else None,
             settings=settings,
             usage_ledger=usage,
+            memory_store=memory_store,
         )
+
+    def close(self, *, purge_memory: bool = False) -> None:
+        """Release task-local memory, optionally removing its DB namespace."""
+        if purge_memory:
+            self.memory.clear()
 
     def live_executor(
         self, *, system_instructions: tuple[str, ...] = ()
@@ -435,6 +475,23 @@ class CoScopeRuntime:
         self, requests: list[RetrievalRequest]
     ) -> dict[str, RetrievalResult]:
         results = self.retrieval.retrieve_batch(requests)
+        self._trace_retrieval_results(requests, results)
+        return results
+
+    def retrieve_independently(
+        self,
+        requests: list[RetrievalRequest],
+    ) -> dict[str, RetrievalResult]:
+        """Execute one uncached vector-store query per request."""
+        results = self.retrieval.retrieve_independently(requests)
+        self._trace_retrieval_results(requests, results)
+        return results
+
+    def _trace_retrieval_results(
+        self,
+        requests: list[RetrievalRequest],
+        results: dict[str, RetrievalResult],
+    ) -> None:
         for request in requests:
             result = results[request.request_id]
             self._trace(
@@ -450,7 +507,6 @@ class CoScopeRuntime:
                     "fallback": result.fallback_triggered,
                 },
             )
-        return results
 
     def assemble_context(
         self, request: RetrievalRequest, result: RetrievalResult

@@ -211,11 +211,37 @@ class RetrievalSettings:
 
 
 @dataclass(frozen=True)
+class MemorySettings:
+    provider: str = "memory"
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    qdrant_collection: str = "coscope_memory"
+    timeout_seconds: float = 30.0
+
+    def validate(self) -> None:
+        if self.provider not in {"memory", "qdrant"}:
+            raise ProviderConfigurationError(
+                f"unsupported memory provider: {self.provider}"
+            )
+        if self.provider == "qdrant":
+            if not self.qdrant_url:
+                raise ProviderConfigurationError(
+                    "COSCOPE_QDRANT_URL is required when "
+                    "COSCOPE_MEMORY_PROVIDER=qdrant"
+                )
+            if not self.qdrant_collection:
+                raise ProviderConfigurationError(
+                    "COSCOPE_QDRANT_COLLECTION cannot be empty"
+                )
+
+
+@dataclass(frozen=True)
 class CoScopeSettings:
     runtime_mode: str
     llm: LLMSettings
     embedding: EmbeddingSettings
     retrieval: RetrievalSettings
+    memory: MemorySettings
 
     @classmethod
     def from_env(
@@ -346,8 +372,35 @@ class CoScopeSettings:
                 _read(source, "COSCOPE_SHARED_CANDIDATE_K", "50"),
             ),
         )
-        settings = cls(runtime_mode, llm, embedding, retrieval)
+        memory = MemorySettings(
+            provider=_read(
+                source,
+                "COSCOPE_MEMORY_PROVIDER",
+                "memory",
+            ).casefold(),
+            qdrant_url=_read(
+                source,
+                "COSCOPE_QDRANT_URL",
+                "",
+            ).rstrip("/"),
+            qdrant_api_key=_read(
+                source,
+                "COSCOPE_QDRANT_API_KEY",
+                "",
+            ),
+            qdrant_collection=_read(
+                source,
+                "COSCOPE_QDRANT_COLLECTION",
+                "coscope_memory",
+            ),
+            timeout_seconds=_positive_float(
+                "COSCOPE_QDRANT_TIMEOUT_SECONDS",
+                _read(source, "COSCOPE_QDRANT_TIMEOUT_SECONDS", "30"),
+            ),
+        )
+        settings = cls(runtime_mode, llm, embedding, retrieval, memory)
         retrieval.validate()
+        memory.validate()
         if settings.live:
             llm.validate()
             embedding.validate()

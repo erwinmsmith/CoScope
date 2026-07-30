@@ -99,6 +99,10 @@ COSCOPE_EMBEDDING_DIMENSION=384
 COSCOPE_EMBEDDING_CACHE_DIR=fastembed_cache
 COSCOPE_EMBEDDING_THREADS=2
 COSCOPE_EMBEDDING_RESULT_CACHE_SIZE=4096
+
+COSCOPE_MEMORY_PROVIDER=qdrant
+COSCOPE_QDRANT_URL=http://127.0.0.1:6333
+COSCOPE_QDRANT_COLLECTION=coscope_memory
 ```
 
 FastEmbed downloads a quantized ONNX model once, verifies its SHA-256 identity,
@@ -185,7 +189,10 @@ documented in [Benchmark Datasets](docs/DATASETS.md).
 
 The canonical benchmark launch uses
 `coscope.scripts.run_factorial_experiment`: all planner/solver/verifier agents
-uniformly use CoT or ToT under each of CoScope, full-sharing, and no-sharing.
+uniformly use CoT or ToT under each combination of CoScope/full-sharing/
+no-sharing and batched/independent retrieval. Formal cloud runs require
+Qdrant; all memory writes, reads, scope filters, and vector searches go through
+the database.
 Run `coscope.scripts.preflight_experiment --workflow factorial --full` before
 any provider-backed full launch.
 

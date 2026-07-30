@@ -1,7 +1,8 @@
 [Unit]
 Description=CoScope durable factorial experiment
-After=network-online.target docker.service
+After=network-online.target docker.service coscope-qdrant.service
 Wants=network-online.target docker.service
+Requires=coscope-qdrant.service
 
 [Service]
 Type=simple
@@ -9,7 +10,7 @@ User=root
 Group=root
 WorkingDirectory=/opt/coscope
 EnvironmentFile=/etc/coscope/coscope.env
-ExecStart=/opt/coscope/.venv/bin/python -m coscope.scripts.run_cloud_factorial --full --confirm-full-run --workers 3 --evalplus-memory 2g --purge-details-after-success --state-dir /var/lib/coscope/runs/factorial-local-bge-v1 --data-root /var/lib/coscope/data
+ExecStart=/opt/coscope/.venv/bin/python -m coscope.scripts.run_cloud_factorial --full --confirm-full-run --reasoning-modes cot,tot --sharing-policies coscope,full_sharing,no_sharing --batch-modes batched,independent --workers 3 --evalplus-memory 2g --purge-details-after-success --state-dir /var/lib/coscope/runs/factorial-qdrant-v1 --data-root /var/lib/coscope/data
 Restart=on-failure
 RestartSec=30
 KillSignal=SIGTERM

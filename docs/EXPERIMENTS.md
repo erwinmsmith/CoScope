@@ -83,6 +83,7 @@ The primary experiment is the complete Cartesian product:
 ```text
 2 reasoning modes (CoT, ToT)
 x 3 sharing policies (CoScope, full-sharing, no-sharing)
+x 2 retrieval execution modes (batched, independent)
 x 8 benchmarks
 ```
 
@@ -98,6 +99,7 @@ python -m coscope.scripts.preflight_experiment \
   --full \
   --reasoning-modes cot,tot \
   --sharing-policies coscope,full_sharing,no_sharing \
+  --batch-modes batched,independent \
   --output new_results/full_factorial_preflight.json
 ```
 
@@ -109,16 +111,24 @@ python -m coscope.scripts.run_factorial_experiment \
   --confirm-full-run \
   --reasoning-modes cot,tot \
   --sharing-policies coscope,full_sharing,no_sharing \
+  --batch-modes batched,independent \
   --bootstrap-samples 5000 \
   --output new_results/factorial_cot_tot_full.json
 ```
 
-For each example, CoT uses `3 agents x 1 call x 3 policies = 9` LLM calls.
-ToT uses `3 agents x 4 calls x 3 policies = 36`, for 45 total. ToT creates
-nine branch retrieval requests per sharing condition and submits them in one
-scope-safe batch. Shared first-stage recall may be reused, while every
-agent/branch independently authorizes, reranks, falls back, and assembles its
-context.
+For each example, CoT uses
+`3 agents x 1 call x 3 policies x 2 batch modes = 18` LLM calls. ToT uses
+`3 agents x 4 calls x 3 policies x 2 batch modes = 72`, for 90 total.
+The batched condition submits all agent/branch requests to scope-safe grouping;
+the independent condition executes one uncached vector-store query per
+request. Every agent/branch independently authorizes, reranks, falls back, and
+assembles its context in both conditions.
+
+Formal runs require `COSCOPE_MEMORY_PROVIDER=qdrant`. Every memory is written
+to and reconstructed from Qdrant. Tenant, workspace, scope, lifecycle state,
+memory type, and expiration constraints are applied as vector-database payload
+filters before ranking. Task-local points are deleted after task metrics are
+assembled; a retry reconstructs the namespace if checkpointing is interrupted.
 
 GoT occupies the same mode registry and can later be added with
 `--reasoning-modes cot,tot,got`; it is intentionally absent from the default
@@ -135,10 +145,11 @@ repeat successful provider calls:
 python -m coscope.scripts.run_cloud_factorial \
   --full --confirm-full-run \
   --workers 4 \
+  --batch-modes batched,independent \
   --purge-details-after-success \
   --env-file /etc/coscope/coscope.env \
   --data-root /var/lib/coscope/data \
-  --state-dir /var/lib/coscope/runs/factorial-local-bge-v1
+  --state-dir /var/lib/coscope/runs/factorial-qdrant-v1
 ```
 
 SQLite WAL is the checkpoint source of truth. `status.json` is updated
@@ -162,7 +173,7 @@ Inspect progress without stopping the run:
 
 ```bash
 python -m coscope.scripts.experiment_status \
-  /var/lib/coscope/runs/factorial-local-bge-v1
+  /var/lib/coscope/runs/factorial-qdrant-v1
 ```
 
 See `deploy/ali-root/README.md` for GitHub, systemd, secret placement, dataset

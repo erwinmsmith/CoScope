@@ -8,6 +8,7 @@ import sqlite3
 import time
 import zlib
 from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ class ExperimentTask:
     example_id: str
     reasoning_mode: str
     sharing_policy: str
+    batch_mode: str
 
     @classmethod
     def create(
@@ -28,9 +30,16 @@ class ExperimentTask:
         example_id: str,
         reasoning_mode: str,
         sharing_policy: str,
+        batch_mode: str = "batched",
     ) -> ExperimentTask:
         readable = "\x1f".join(
-            (benchmark, example_id, reasoning_mode, sharing_policy)
+            (
+                benchmark,
+                example_id,
+                reasoning_mode,
+                sharing_policy,
+                batch_mode,
+            )
         )
         digest = hashlib.sha256(readable.encode("utf-8")).hexdigest()
         return cls(
@@ -39,6 +48,7 @@ class ExperimentTask:
             example_id=example_id,
             reasoning_mode=reasoning_mode,
             sharing_policy=sharing_policy,
+            batch_mode=batch_mode,
         )
 
 
@@ -52,6 +62,7 @@ class ClaimedEvalJob:
     job_key: str
     reasoning_mode: str
     sharing_policy: str
+    batch_mode: str
     attempt: int
 
 
@@ -71,13 +82,18 @@ class ExperimentCheckpoint:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize_schema()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=FULL")
-        connection.execute("PRAGMA foreign_keys=ON")
-        return connection
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=FULL")
+            connection.execute("PRAGMA foreign_keys=ON")
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _initialize_schema(self) -> None:
         with self._connect() as connection:
@@ -93,6 +109,7 @@ class ExperimentCheckpoint:
                     example_id TEXT NOT NULL,
                     reasoning_mode TEXT NOT NULL,
                     sharing_policy TEXT NOT NULL,
+                    batch_mode TEXT NOT NULL DEFAULT 'batched',
                     status TEXT NOT NULL DEFAULT 'pending'
                         CHECK(status IN ('pending', 'running', 'succeeded', 'failed')),
                     attempts INTEGER NOT NULL DEFAULT 0,
@@ -124,6 +141,7 @@ class ExperimentCheckpoint:
                     job_key TEXT PRIMARY KEY,
                     reasoning_mode TEXT NOT NULL,
                     sharing_policy TEXT NOT NULL,
+                    batch_mode TEXT NOT NULL DEFAULT 'batched',
                     status TEXT NOT NULL DEFAULT 'pending'
                         CHECK(status IN ('pending', 'running', 'succeeded', 'failed')),
                     attempts INTEGER NOT NULL DEFAULT 0,
@@ -143,6 +161,29 @@ class ExperimentCheckpoint:
                 connection.execute(
                     "ALTER TABLE tasks ADD COLUMN metrics_zlib BLOB"
                 )
+            if "batch_mode" not in columns:
+                connection.execute(
+                    "ALTER TABLE tasks ADD COLUMN batch_mode TEXT "
+                    "NOT NULL DEFAULT 'batched'"
+                )
+            eval_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(eval_jobs)")
+            }
+            if "batch_mode" not in eval_columns:
+                connection.execute(
+                    "ALTER TABLE eval_jobs ADD COLUMN batch_mode TEXT "
+                    "NOT NULL DEFAULT 'batched'"
+                )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_tasks_batch_condition
+                ON tasks(
+                    benchmark, reasoning_mode, sharing_policy,
+                    batch_mode, status
+                )
+                """
+            )
 
     def initialize_manifest(
         self,
@@ -195,8 +236,9 @@ class ExperimentCheckpoint:
             connection.executemany(
                 """
                 INSERT OR IGNORE INTO tasks(
-                    task_key, benchmark, example_id, reasoning_mode, sharing_policy
-                ) VALUES(?, ?, ?, ?, ?)
+                    task_key, benchmark, example_id, reasoning_mode,
+                    sharing_policy, batch_mode
+                ) VALUES(?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -205,6 +247,7 @@ class ExperimentCheckpoint:
                         task.example_id,
                         task.reasoning_mode,
                         task.sharing_policy,
+                        task.batch_mode,
                     )
                     for task in task_list
                 ],
@@ -212,16 +255,23 @@ class ExperimentCheckpoint:
             if include_mbpp_eval:
                 modes = sorted({task.reasoning_mode for task in task_list})
                 policies = sorted({task.sharing_policy for task in task_list})
+                batch_modes = sorted({task.batch_mode for task in task_list})
                 connection.executemany(
                     """
                     INSERT OR IGNORE INTO eval_jobs(
-                        job_key, reasoning_mode, sharing_policy
-                    ) VALUES(?, ?, ?)
+                        job_key, reasoning_mode, sharing_policy, batch_mode
+                    ) VALUES(?, ?, ?, ?)
                     """,
                     [
-                        (f"mbpp_plus:{mode}:{policy}", mode, policy)
+                        (
+                            f"mbpp_plus:{mode}:{policy}:{batch_mode}",
+                            mode,
+                            policy,
+                            batch_mode,
+                        )
                         for mode in modes
                         for policy in policies
+                        for batch_mode in batch_modes
                     ],
                 )
         return fingerprint
@@ -320,12 +370,13 @@ class ExperimentCheckpoint:
             rows = connection.execute(
                 """
                 SELECT task_key, benchmark, example_id, reasoning_mode,
-                       sharing_policy, attempts
+                       sharing_policy, batch_mode, attempts
                 FROM tasks
                 WHERE status = 'pending'
                   AND attempts < ?
                   AND next_attempt_at <= ?
-                ORDER BY benchmark, example_id, reasoning_mode, sharing_policy
+                ORDER BY benchmark, example_id, reasoning_mode,
+                         sharing_policy, batch_mode
                 LIMIT ?
                 """,
                 (max_attempts, now, limit),
@@ -349,6 +400,7 @@ class ExperimentCheckpoint:
                     example_id=row["example_id"],
                     reasoning_mode=row["reasoning_mode"],
                     sharing_policy=row["sharing_policy"],
+                    batch_mode=row["batch_mode"],
                     attempt=int(row["attempts"]) + 1,
                 )
                 for row in rows
@@ -481,12 +533,13 @@ class ExperimentCheckpoint:
             self._require_owner(connection, owner_id)
             rows = connection.execute(
                 """
-                SELECT job_key, reasoning_mode, sharing_policy, attempts
+                SELECT job_key, reasoning_mode, sharing_policy,
+                       batch_mode, attempts
                 FROM eval_jobs
                 WHERE status = 'pending'
                   AND attempts < ?
                   AND next_attempt_at <= ?
-                ORDER BY reasoning_mode, sharing_policy
+                ORDER BY reasoning_mode, sharing_policy, batch_mode
                 LIMIT ?
                 """,
                 (max_attempts, now, limit),
@@ -505,6 +558,7 @@ class ExperimentCheckpoint:
                     job_key=row["job_key"],
                     reasoning_mode=row["reasoning_mode"],
                     sharing_policy=row["sharing_policy"],
+                    batch_mode=row["batch_mode"],
                     attempt=int(row["attempts"]) + 1,
                 )
                 for row in rows
@@ -528,9 +582,14 @@ class ExperimentCheckpoint:
                 WHERE benchmark = 'mbpp_plus'
                   AND reasoning_mode = ?
                   AND sharing_policy = ?
+                  AND batch_mode = ?
                   AND status = 'succeeded'
                 """,
-                (job.reasoning_mode, job.sharing_policy),
+                (
+                    job.reasoning_mode,
+                    job.sharing_policy,
+                    job.batch_mode,
+                ),
             ).fetchall()
             if len(rows) != len(scores):
                 raise RuntimeError(
@@ -647,7 +706,8 @@ class ExperimentCheckpoint:
             counts = self.counts()
             conditions = connection.execute(
                 """
-                SELECT benchmark, reasoning_mode, sharing_policy, status,
+                SELECT benchmark, reasoning_mode, sharing_policy,
+                       batch_mode, status,
                        COUNT(*) AS count,
                        AVG(answer_f1) AS answer_f1,
                        AVG(success) AS success_rate,
@@ -655,8 +715,10 @@ class ExperimentCheckpoint:
                        SUM(provider_tokens) AS provider_tokens,
                        AVG(end_to_end_seconds) AS mean_seconds
                 FROM tasks
-                GROUP BY benchmark, reasoning_mode, sharing_policy, status
-                ORDER BY benchmark, reasoning_mode, sharing_policy, status
+                GROUP BY benchmark, reasoning_mode, sharing_policy,
+                         batch_mode, status
+                ORDER BY benchmark, reasoning_mode, sharing_policy,
+                         batch_mode, status
                 """
             ).fetchall()
             eval_rows = connection.execute(
@@ -689,6 +751,7 @@ class ExperimentCheckpoint:
         benchmark: str | None = None,
         reasoning_mode: str | None = None,
         sharing_policy: str | None = None,
+        batch_mode: str | None = None,
     ) -> Iterator[dict[str, Any]]:
         clauses = ["status = 'succeeded'", "result_zlib IS NOT NULL"]
         parameters: list[str] = []
@@ -696,6 +759,7 @@ class ExperimentCheckpoint:
             ("benchmark", benchmark),
             ("reasoning_mode", reasoning_mode),
             ("sharing_policy", sharing_policy),
+            ("batch_mode", batch_mode),
         ):
             if value is not None:
                 clauses.append(f"{column} = ?")
@@ -703,7 +767,8 @@ class ExperimentCheckpoint:
         query = (
             "SELECT result_zlib FROM tasks WHERE "
             + " AND ".join(clauses)
-            + " ORDER BY benchmark, example_id, reasoning_mode, sharing_policy"
+            + " ORDER BY benchmark, example_id, reasoning_mode, "
+            "sharing_policy, batch_mode"
         )
         with self._connect() as connection:
             cursor = connection.execute(query, parameters)
@@ -716,6 +781,7 @@ class ExperimentCheckpoint:
         benchmark: str | None = None,
         reasoning_mode: str | None = None,
         sharing_policy: str | None = None,
+        batch_mode: str | None = None,
     ) -> Iterator[dict[str, Any]]:
         clauses = ["status = 'succeeded'", "metrics_zlib IS NOT NULL"]
         parameters: list[str] = []
@@ -723,6 +789,7 @@ class ExperimentCheckpoint:
             ("benchmark", benchmark),
             ("reasoning_mode", reasoning_mode),
             ("sharing_policy", sharing_policy),
+            ("batch_mode", batch_mode),
         ):
             if value is not None:
                 clauses.append(f"{column} = ?")
@@ -730,7 +797,8 @@ class ExperimentCheckpoint:
         query = (
             "SELECT metrics_zlib FROM tasks WHERE "
             + " AND ".join(clauses)
-            + " ORDER BY benchmark, example_id, reasoning_mode, sharing_policy"
+            + " ORDER BY benchmark, example_id, reasoning_mode, "
+            "sharing_policy, batch_mode"
         )
         with self._connect() as connection:
             cursor = connection.execute(query, parameters)
@@ -830,6 +898,7 @@ def compact_task_metrics(result: Mapping[str, Any]) -> dict[str, Any]:
         "example_id": result["example_id"],
         "reasoning_mode": result["reasoning_mode"],
         "arm": result["arm"],
+        "batch_mode": result.get("batch_mode", "batched"),
         "scores": dict(result["scores"]),
         "task_success": bool(result["task_success"]),
         "provider_usage": {
@@ -850,7 +919,10 @@ def compact_task_metrics(result: Mapping[str, Any]) -> dict[str, Any]:
                 "private_store_queries",
                 "store_queries",
                 "shared_recall_savings",
+                "query_reduction_rate",
                 "fallback_triggers",
+                "memory_store_backend",
+                "vector_store_query_seconds",
                 "recall_at_10",
                 "mrr_at_10",
                 "latency_seconds",

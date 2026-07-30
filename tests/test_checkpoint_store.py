@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -111,6 +112,56 @@ def test_checkpoint_completion_is_not_claimed_twice(tmp_path: Path) -> None:
         "total": 1,
     }
     assert list(store.iter_results()) == [_result()]
+
+
+def test_checkpoint_keeps_batch_mode_as_an_independent_dimension(
+    tmp_path: Path,
+) -> None:
+    store = ExperimentCheckpoint(tmp_path / "checkpoint.sqlite3")
+    batched = ExperimentTask.create(
+        "mbpp_plus",
+        "sample-1",
+        "cot",
+        "full_sharing",
+        "batched",
+    )
+    independent = ExperimentTask.create(
+        "mbpp_plus",
+        "sample-1",
+        "cot",
+        "full_sharing",
+        "independent",
+    )
+    assert batched.task_key != independent.task_key
+
+    store.initialize_manifest(
+        {},
+        [batched, independent],
+        include_mbpp_eval=True,
+    )
+    store.acquire_coordinator("worker", stale_after_seconds=60)
+
+    claimed = store.claim_tasks("worker", limit=2, max_attempts=2)
+    assert {task.batch_mode for task in claimed} == {
+        "batched",
+        "independent",
+    }
+    jobs = store.claim_eval_jobs("worker", limit=2, max_attempts=2)
+    assert {job.batch_mode for job in jobs} == {
+        "batched",
+        "independent",
+    }
+
+
+def test_checkpoint_connections_are_closed_after_each_operation(
+    tmp_path: Path,
+) -> None:
+    store = ExperimentCheckpoint(tmp_path / "checkpoint.sqlite3")
+    with store._connect() as connection:
+        connection.execute("SELECT 1").fetchone()
+
+    with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+        connection.execute("SELECT 1")
 
 
 def test_checkpoint_recovers_running_task_after_stale_owner(

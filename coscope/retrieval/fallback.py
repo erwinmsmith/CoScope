@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from coscope.adapters.embedding import EmbeddingAdapter
-from coscope.memory.store import RuntimeMemoryStore
+from coscope.memory.store import MemoryStore
 from coscope.retrieval.request import RetrievalCandidate, RetrievalRequest
 from coscope.scope.effective_view import EffectiveView
 
@@ -11,7 +11,7 @@ from coscope.scope.effective_view import EffectiveView
 class PrivateFallback:
     def __init__(
         self,
-        store: RuntimeMemoryStore,
+        store: MemoryStore,
         embedder: EmbeddingAdapter,
         *,
         minimum_score: float = 0.15,

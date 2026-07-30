@@ -114,12 +114,12 @@ def test_preflight_estimates_default_factorial_matrix() -> None:
         workflow="factorial",
     )
 
-    assert report["model_calls_per_example"] == 45
-    assert report["planned"]["factorial_conditions"] == 6
-    assert report["planned"]["retrieval_requests"] == 36
-    assert report["planned"]["llm_calls"] == 45
-    assert report["planned"]["task_records"] == 6
-    assert report["planned"]["evalplus_container_runs"] == 6
+    assert report["model_calls_per_example"] == 90
+    assert report["planned"]["factorial_conditions"] == 12
+    assert report["planned"]["retrieval_requests"] == 72
+    assert report["planned"]["llm_calls"] == 90
+    assert report["planned"]["task_records"] == 12
+    assert report["planned"]["evalplus_container_runs"] == 12
 
 
 def test_2wiki_loader_deduplicates_identical_titled_context(

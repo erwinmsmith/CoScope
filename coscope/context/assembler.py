@@ -6,7 +6,7 @@ from coscope.context.budget import estimate_tokens
 from coscope.context.packet import ContextPacket
 from coscope.context.selector import ContextSelector
 from coscope.core.artifact import ArtifactState, ArtifactType
-from coscope.memory.store import RuntimeMemoryStore
+from coscope.memory.store import MemoryStore
 from coscope.retrieval.request import RetrievalRequest, RetrievalResult
 from coscope.scope.descriptor import Visibility
 
@@ -14,7 +14,7 @@ from coscope.scope.descriptor import Visibility
 class ContextManager:
     def __init__(
         self,
-        store: RuntimeMemoryStore,
+        store: MemoryStore,
         selector: ContextSelector | None = None,
     ):
         self.store = store

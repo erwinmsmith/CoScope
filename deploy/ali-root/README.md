@@ -18,12 +18,27 @@ python3.10 -m venv .venv
 
 install -d -m 700 /etc/coscope
 install -d -m 700 \
-  /var/lib/coscope/data /var/lib/coscope/models /var/lib/coscope/runs
+  /var/lib/coscope/data /var/lib/coscope/models /var/lib/coscope/qdrant \
+  /var/lib/coscope/runs
 cp .env.example /etc/coscope/coscope.env
 chmod 600 /etc/coscope/coscope.env
 ```
 
 Edit `/etc/coscope/coscope.env` on the server and set the provider keys.
+Set `COSCOPE_MEMORY_PROVIDER=qdrant`,
+`COSCOPE_QDRANT_URL=http://127.0.0.1:6333`, and
+`COSCOPE_QDRANT_COLLECTION=coscope_memory`. The formal runner rejects the
+in-process memory backend.
+
+Install and start the pinned vector database before provider validation:
+
+```bash
+docker pull qdrant/qdrant:v1.18.3
+install -m 644 deploy/ali-root/coscope-qdrant.service \
+  /etc/systemd/system/coscope-qdrant.service
+systemctl daemon-reload
+systemctl enable --now coscope-qdrant
+```
 Do not use `git add -f` on that file. Transfer datasets separately, for
 example:
 
@@ -56,7 +71,7 @@ cd /opt/coscope
   --output /var/lib/coscope/runs/full-preflight.json
 ```
 
-Install and launch the checkpointed runner:
+Install the checkpointed runner:
 
 ```bash
 install -m 644 deploy/ali-root/coscope-factorial.service \
@@ -65,19 +80,22 @@ systemctl daemon-reload
 systemctl enable --now coscope-factorial
 ```
 
-The service runs three task workers. Tune `--workers` conservatively according
-to provider rate limits; it controls concurrent example-condition executions,
-not the internal ToT branch count.
+The service runs the 2 reasoning modes × 3 sharing policies × 2 retrieval
+execution modes matrix with three task workers. Batched conditions issue one
+scope-filtered vector query per compatible group. Independent conditions issue
+one uncached vector query per agent/node/branch. Tune `--workers`
+conservatively according to provider and Qdrant resource limits.
 
 ## Progress and recovery
 
 ```bash
 systemctl status coscope-factorial
 journalctl -u coscope-factorial -f
+systemctl status coscope-qdrant
 
 cd /opt/coscope
 .venv/bin/python -m coscope.scripts.experiment_status \
-  /var/lib/coscope/runs/factorial-local-bge-v1
+  /var/lib/coscope/runs/factorial-qdrant-v1
 ```
 
 `checkpoint.sqlite3` is the source of truth. `status.json` is replaced
@@ -117,11 +135,11 @@ SQLite and can be exported when needed:
 
 ```bash
 .venv/bin/python -m coscope.scripts.experiment_status \
-  /var/lib/coscope/runs/factorial-local-bge-v1 \
+  /var/lib/coscope/runs/factorial-qdrant-v1 \
   --export-results \
-  /var/lib/coscope/runs/factorial-local-bge-v1/results.jsonl
+  /var/lib/coscope/runs/factorial-qdrant-v1/results.jsonl
 ```
 
-MBPP-Plus predictions are scored in six checkpointed EvalPlus jobs after
+MBPP-Plus predictions are scored in twelve checkpointed EvalPlus jobs after
 generation finishes. Docker execution remains network-disabled and separate
 from the LLM task checkpoints.
