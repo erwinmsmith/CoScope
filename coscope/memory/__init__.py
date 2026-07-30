@@ -1,26 +1,22 @@
-"""
-CoScope Memory Module.
-
-Memory storage with multiple backend support and CRUD operations.
-"""
-
-# Backend stores
+from coscope.memory.commit import CommitService
+from coscope.memory.lifecycle import LifecycleManager
+from coscope.memory.promotion import PromotionService
+from coscope.memory.qdrant_store import QdrantMemoryStore, build_qdrant_store
 from coscope.memory.store import (
-    InMemoryMemoryStore,
-    MemoryManager,
-    create_memory_store,
+    MemoryStore,
+    RuntimeMemoryStore,
+    SearchHit,
+    cosine_similarity,
 )
 
-# CRUD operations
-from coscope.memory.crud import MemoryCRUD, MemoryFilter, MemoryQuery
-
 __all__ = [
-    # Stores
-    "InMemoryMemoryStore",
-    "MemoryManager",
-    "create_memory_store",
-    # CRUD
-    "MemoryCRUD",
-    "MemoryFilter",
-    "MemoryQuery",
+    "CommitService",
+    "LifecycleManager",
+    "MemoryStore",
+    "PromotionService",
+    "QdrantMemoryStore",
+    "RuntimeMemoryStore",
+    "SearchHit",
+    "build_qdrant_store",
+    "cosine_similarity",
 ]

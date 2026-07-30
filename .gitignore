@@ -1,108 +1,53 @@
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
-
-# C extensions
-*.c
-*.o
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
 .pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Environments
-.env
-.env.local
-.venv
-env/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.venv/
 venv/
-ENV/
-env.bak/
-venv.bak/
-*.local
-
-# IDEs
-.idea/
-*.iml
-.vscode/
-*.swp
-*.swo
-*~
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# OS
+.env
+.env.*
+!.env.example
 .DS_Store
-Thumbs.db
-
-# Project specific
-coscope_data/
 *.log
-logs/
-
-# Dataset artifacts and local-only data workspace (not tracked in git)
-# Leading slash anchors to repo root so coscope/data/ (source code) is NOT ignored.
-/data/
-
-# Large dataset artifacts under coscope/data/ (raw corpora, processed shards, interim)
-# Keep directory structure via .gitkeep only; actual data is regenerated locally.
-coscope/data/raw/
-coscope/data/processed/
-coscope/data/interim/
-
-# Temporary files
 *.tmp
-*.bak
 *.cache
 
-# Secrets (never commit these)
-*.pem
-*.key
-secrets/
-credentials/
-CLAUDE.md
+# Local research workspace; never part of the runtime package.
+/CoScope_unified/
+/raw/
+/eval/
+/logs/
+/new_results/
+/experiment_runs/
+/run_state/
+
+# Local papers, handoff notes, images, and transfer helpers.
+/*.pdf
+/*.docx
+/*.jpg
+/*.ps1
+/7.20-7.31时间表.md
+/code_structure.md
+/cot_got_tot_combined_summary_qwen.md
+/handoff_file_list_2026-07-26.md
+/stage_results.md
+
+# Runtime outputs and secrets.
+/data/
+/artifacts/
+/traces/
+/cache/
+/fastembed_cache/
+/credentials/
+/secrets/
+*.sqlite
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal

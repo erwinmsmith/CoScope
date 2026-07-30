@@ -1,15 +1,17 @@
-"""CoScope Configuration Management."""
-
 from coscope.config.settings import (
-    CoScopeConfig,
-    get_config,
-    reload_config,
-    ConfigLoader,
+    CoScopeSettings,
+    EmbeddingSettings,
+    LLMSettings,
+    MemorySettings,
+    ProviderConfigurationError,
+    RetrievalSettings,
 )
 
 __all__ = [
-    "CoScopeConfig",
-    "get_config",
-    "reload_config",
-    "ConfigLoader",
+    "CoScopeSettings",
+    "EmbeddingSettings",
+    "LLMSettings",
+    "MemorySettings",
+    "ProviderConfigurationError",
+    "RetrievalSettings",
 ]

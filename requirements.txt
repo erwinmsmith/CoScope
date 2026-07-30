@@ -1,16 +1,7 @@
-# Core dependencies
-numpy>=1.24.0
-pydantic>=2.0.0
-tenacity>=8.2.0
-
-# Optional: LangChain integration
-# langchain>=0.1.0
-# langchain-core>=0.1.0
-
-# Optional: LangGraph integration
-# langgraph>=0.0.20
-
-# Development dependencies
-# pytest>=7.4.0
-# pytest-asyncio>=0.21.0
-# ruff>=0.1.0
+# pyproject.toml is authoritative.
+numpy>=1.24
+openai>=2.0
+python-dotenv>=1.0
+qdrant-client==1.18.0
+# Required when COSCOPE_EMBEDDING_PROVIDER=fastembed.
+fastembed==0.7.4
